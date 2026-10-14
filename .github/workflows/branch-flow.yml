@@ -2,7 +2,7 @@ name: Branch flow
 
 on:
   pull_request:
-    branches: [main, preprod, develop]
+    branches: [prod, preprod, develop]
 
 jobs:
   check-source-branch:
@@ -14,8 +14,8 @@ jobs:
           HEAD: ${{ github.head_ref }}
         run: |
           case "$BASE" in
-            main)
-              [[ "$HEAD" == "preprod" || "$HEAD" == hotfix/* ]] || { echo "::error::PR do main tylko z preprod lub hotfix/*"; exit 1; } ;;
+            prod)
+              [[ "$HEAD" == "preprod" || "$HEAD" == hotfix/* ]] || { echo "::error::PR do prod tylko z preprod lub hotfix/*"; exit 1; } ;;
             preprod)
               [[ "$HEAD" == "develop" || "$HEAD" == hotfix/* ]] || { echo "::error::PR do preprod tylko z develop lub hotfix/*"; exit 1; } ;;
           esac
