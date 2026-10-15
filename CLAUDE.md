@@ -4,15 +4,20 @@ Backend of dock.mita. Guidance for working in this repository.
 
 ## Stack
 
+The agreed stack is in [docs/STACK.md](docs/STACK.md). Do not introduce libraries outside it without asking. Items marked TBD there need confirmation before use.
+
 - .NET 10, C#, nullable reference types enabled
-- ASP.NET Core Minimal APIs
-- Mediator (martinothamar/Mediator, source-generated) for commands, queries and notifications
-- EF Core with PostgreSQL (Npgsql)
+- ASP.NET Core Minimal APIs with API versioning (`Asp.Versioning`)
+- MediatR (TBD) for commands, queries and pipeline behaviors
+- PostgreSQL: EF Core (Npgsql) for CRUD and migrations, Dapper for complex read queries
 - FluentValidation
-- Scalar for API documentation (OpenAPI via `Microsoft.AspNetCore.OpenApi`)
-- Serilog for logging, OpenTelemetry for traces and metrics
-- Testing: xUnit, Testcontainers (PostgreSQL), Shouldly, NSubstitute
-- Docker and docker compose for local development and deployment
+- OpenAPI generated from code, Swagger UI / Scalar for exploration
+- MS Identity + JWT, RBAC through authorization policies
+- Redis for caching, RustFS (S3 API) for object storage
+- Polly for resilience of outgoing HTTP calls
+- Serilog with Elastic APM for logging, tracing and metrics
+- Testing: xUnit, Shouldly, Moq, Bogus, Testcontainers (TBD) for PostgreSQL and Redis, JUnit XML reports
+- Docker images deployed to Kubernetes through Argo CD (GitOps)
 - Central package management (`Directory.Packages.props`), `Directory.Build.props` for shared settings
 
 ## Architecture: Vertical Slice
@@ -67,8 +72,9 @@ Rules:
 - Each feature exposes a `Map<Feature>Endpoints(this IEndpointRouteBuilder)` extension and is registered in `Program.cs`.
 - Validation runs in a Mediator pipeline behavior using FluentValidation, never inside handlers.
 - Errors are returned as RFC 9457 `ProblemDetails`. Use a result type for expected failures and exceptions only for unexpected ones.
-- Queries use `AsNoTracking` and project to response DTOs with `Select`. Never expose entities from the API.
-- Every query that returns a collection is paginated.
+- Queries use `AsNoTracking` and project to response DTOs with `Select`. Use Dapper when a read query is too complex or too slow for LINQ. Never expose entities from the API.
+- Every query that returns a collection is paginated (offset by default, cursor-based for large or infinite lists).
+- Every endpoint belongs to an API version group and declares its authorization policy explicitly.
 - Pass `CancellationToken` through every async call.
 - Database changes go through EF Core migrations. Never edit an applied migration.
 
@@ -103,7 +109,7 @@ docker compose up -d
 
 ## Testing
 
-- Unit-test validators and non-trivial handler logic.
+- Unit-test validators and non-trivial handler logic. Mock dependencies with Moq, build test data with Bogus, assert with Shouldly.
 - Integration-test each endpoint against a real PostgreSQL started by Testcontainers, using `WebApplicationFactory`. Do not use the EF in-memory provider.
 - Test names describe behaviour: `Should_ReturnNotFound_When_OrderDoesNotExist`.
 
