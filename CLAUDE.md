@@ -93,6 +93,9 @@ Rules:
 - Branches: `prod` (production), `preprod`, `develop`. Work happens in `feature/*`, `bugfix/*`, `hotfix/*` branches.
 - Flow: `feature/*` -> `develop` -> `preprod` -> `prod`. Hotfixes go to `prod` and are back-merged into `develop`.
 - Everything reaches the long-lived branches through pull requests.
+- Always rebase. Pull requests are merged with rebase merge only (no merge commits, no squash), so `prod`, `preprod` and `develop` keep a linear history.
+- Keep a feature branch up to date by rebasing it onto its base (`git rebase origin/develop`), never by merging the base into it. Push a rebased feature branch with `git push --force-with-lease`. Never force-push `prod`, `preprod` or `develop`.
+- Before opening a pull request, make every commit meaningful: no empty, "fix typo" or "wip" commits.
 - Use Conventional Commits: `feat:`, `fix:`, `refactor:`, `test:`, `chore:`, `docs:`.
 - Never mention Claude, AI or any assistant in commit messages, PR titles or descriptions, code comments, or any other artifact. No `Co-Authored-By` trailers, no "Generated with" lines.
 
