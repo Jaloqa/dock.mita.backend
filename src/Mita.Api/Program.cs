@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddMitaLogging();
 builder.Services.AddMitaErrorHandling();
 builder.Services.AddMitaHealth();
+builder.Services.AddMitaMediator();
 
 var app = builder.Build();
 
