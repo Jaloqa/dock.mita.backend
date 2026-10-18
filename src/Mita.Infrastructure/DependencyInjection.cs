@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using Mita.Infrastructure.Authentication;
 using Mita.Infrastructure.Caching;
 using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
@@ -38,6 +39,8 @@ public static class DependencyInjection
             .AddInterceptors(provider.GetRequiredService<AuditingInterceptor>()));
 
         services.AddHealthChecks().AddDbContextCheck<AppDbContext>("postgres", tags: [ReadyTag]);
+
+        services.AddScoped<ITokenService, TokenService>();
 
         services.AddCaching();
 
