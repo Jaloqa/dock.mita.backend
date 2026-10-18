@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Mita.Infrastructure;
 
 namespace Mita.Api.Extensions;
 
 public static class HealthExtensions
 {
     public const string LiveTag = "live";
-    public const string ReadyTag = "ready";
 
     public static IServiceCollection AddMitaHealth(this IServiceCollection services)
     {
@@ -22,7 +22,7 @@ public static class HealthExtensions
 
         endpoints.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
-            Predicate = check => check.Tags.Contains(ReadyTag)
+            Predicate = check => check.Tags.Contains(DependencyInjection.ReadyTag)
         }).AllowAnonymous();
 
         return endpoints;

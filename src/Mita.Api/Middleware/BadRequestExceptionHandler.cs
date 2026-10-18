@@ -14,9 +14,15 @@ public sealed partial class BadRequestExceptionHandler : IExceptionHandler
         Exception exception,
         CancellationToken cancellationToken)
     {
-        if (exception is not BadHttpRequestException { StatusCode: StatusCodes.Status400BadRequest } badRequest)
+        if (exception is not BadHttpRequestException badRequest)
         {
             return false;
+        }
+
+        if (badRequest.StatusCode != StatusCodes.Status400BadRequest)
+        {
+            await ProblemDetailsWriter.WriteStatusAsync(httpContext, badRequest.StatusCode);
+            return true;
         }
 
         var error = Error.Validation(
