@@ -8,7 +8,7 @@ The agreed stack is in [docs/STACK.md](docs/STACK.md). Do not introduce librarie
 
 - .NET 10, C#, nullable reference types enabled
 - ASP.NET Core Minimal APIs with API versioning (`Asp.Versioning`)
-- MediatR (TBD) for commands, queries and pipeline behaviors
+- MediatR 12.5.0 (pinned, last Apache-2.0 release, do not upgrade) for commands, queries and pipeline behaviors
 - PostgreSQL: EF Core (Npgsql) for CRUD and migrations, Dapper for complex read queries
 - FluentValidation
 - OpenAPI generated from code, Swagger UI / Scalar for exploration
@@ -16,7 +16,7 @@ The agreed stack is in [docs/STACK.md](docs/STACK.md). Do not introduce librarie
 - Redis for caching, RustFS (S3 API) for object storage
 - Polly for resilience of outgoing HTTP calls
 - Serilog with Elastic APM for logging, tracing and metrics
-- Testing: xUnit, Shouldly, Moq, Bogus, Testcontainers (TBD) for PostgreSQL and Redis, JUnit XML reports
+- Testing: xUnit, Shouldly, Moq, Bogus, Testcontainers for PostgreSQL and Redis, JUnit XML reports
 - Docker images deployed to Kubernetes through Argo CD (GitOps)
 - Central package management (`Directory.Packages.props`), `Directory.Build.props` for shared settings
 
@@ -103,10 +103,10 @@ Rules:
 
 ```
 dotnet build
-dotnet test
-dotnet run --project src/DockMita.Api
-dotnet ef migrations add <Name> --project src/DockMita.Infrastructure --startup-project src/DockMita.Api
-dotnet ef database update --project src/DockMita.Infrastructure --startup-project src/DockMita.Api
+dotnet test --logger junit
+dotnet run --project src/Mita.Api
+dotnet ef migrations add <Name> --project src/Mita.Infrastructure --startup-project src/Mita.Api
+dotnet ef database update --project src/Mita.Infrastructure --startup-project src/Mita.Api
 docker compose up -d
 ```
 
