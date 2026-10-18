@@ -23,6 +23,20 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
     }
 
     [Fact]
+    public async Task Should_ListVersionedPaths_WithoutVersionTemplate()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/system/ping", out _).ShouldBeTrue();
+        paths.EnumerateObject().ShouldNotContain(path => path.Name.Contains("{version}"));
+    }
+
+    [Fact]
     public async Task Should_NotServeScalar_OutsideDevelopment()
     {
         using var client = factory.CreateClient();
