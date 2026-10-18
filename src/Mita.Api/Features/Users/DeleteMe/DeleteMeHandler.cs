@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Mita.Api.Authentication;
 using Mita.Api.Common;
+using Mita.Infrastructure.Authentication;
 using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
 
@@ -11,6 +12,7 @@ public sealed class DeleteMeHandler(
     AppDbContext db,
     UserManager<AppUser> userManager,
     LockoutCounter lockoutCounter,
+    SecurityStampCache stamps,
     ICurrentUser currentUser)
     : IRequestHandler<DeleteMeCommand, Result>
 {
@@ -39,6 +41,8 @@ public sealed class DeleteMeHandler(
             throw new InvalidOperationException(
                 $"User deletion failed: {string.Join(", ", deleted.Errors.Select(error => error.Code))}");
         }
+
+        await stamps.InvalidateAsync(user.Id);
 
         return Result.Success();
     }

@@ -71,17 +71,25 @@ public static class AuthExtensions
             },
             OnTokenValidated = context =>
             {
-                if (!CurrentUser.TryReadId(context.Principal, out _))
+                if (!CurrentUser.TryReadId(context.Principal, out var userId))
                 {
                     context.Fail("The token has no valid sub claim.");
+                    return Task.CompletedTask;
                 }
 
-                return Task.CompletedTask;
+                return SecurityStampValidation.ValidateAsync(context, userId);
             },
             OnChallenge = async context =>
             {
                 context.HandleResponse();
                 context.Response.Headers.WWWAuthenticate = JwtBearerDefaults.AuthenticationScheme;
+                if (context.AuthenticateFailure is SessionExpiredException)
+                {
+                    await new ErrorProblemResult(Error.Unauthorized(SecurityStampValidation.SessionExpiredCode))
+                        .ExecuteAsync(context.HttpContext);
+                    return;
+                }
+
                 await WriteProblemAsync(context.HttpContext, StatusCodes.Status401Unauthorized, "Unauthorized");
             },
             OnForbidden = context =>
