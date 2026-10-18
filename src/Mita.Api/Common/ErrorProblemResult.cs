@@ -29,7 +29,9 @@ internal sealed class ErrorProblemResult(Error error) : IResult
                 conflict.Extensions["code"] = error.Code;
                 return conflict;
             case ErrorType.Unauthorized:
-                return new ProblemDetails { Status = StatusCodes.Status401Unauthorized, Title = "Unauthorized" };
+                var unauthorized = new ProblemDetails { Status = StatusCodes.Status401Unauthorized, Title = "Unauthorized" };
+                unauthorized.Extensions["code"] = error.Code;
+                return unauthorized;
             case ErrorType.Forbidden:
                 return new ProblemDetails { Status = StatusCodes.Status403Forbidden, Title = "Forbidden" };
             default:
