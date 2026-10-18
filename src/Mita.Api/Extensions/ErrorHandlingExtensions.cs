@@ -1,3 +1,4 @@
+using Mita.Api.Common;
 using Mita.Api.Middleware;
 
 namespace Mita.Api.Extensions;
@@ -26,6 +27,11 @@ public static class ErrorHandlingExtensions
             IResult () => throw new InvalidOperationException("Test failure")).AllowAnonymous();
 
         endpoints.MapPost("/test/echo", (EchoBody body) => Results.Ok(body)).AllowAnonymous();
+
+        endpoints.MapGet(
+            "/test/page",
+            ([AsParameters] PageRequest request) =>
+                Results.Ok(new PageResponse<int>([], request.Page, request.PageSize, 0))).AllowAnonymous();
 
         return endpoints;
     }
