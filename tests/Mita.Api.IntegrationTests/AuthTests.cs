@@ -85,15 +85,15 @@ public sealed class AuthTests(MitaApiFactory factory) : IClassFixture<MitaApiFac
     [Fact]
     public async Task Should_ReturnUserId_When_TokenValid()
     {
-        var userId = Guid.NewGuid();
-        using var client = CreateClient(TestTokens.Create(userId));
+        var user = await TestTokens.CreateForNewUserAsync(factory);
+        using var client = CreateClient(user.Token);
 
         using var response = await client.GetAsync(PingPath, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var body = JsonDocument.Parse(
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        body.RootElement.GetProperty("userId").GetGuid().ShouldBe(userId);
+        body.RootElement.GetProperty("userId").GetGuid().ShouldBe(user.UserId);
     }
 
     private async Task AssertPingUnauthorizedAsync(string token)

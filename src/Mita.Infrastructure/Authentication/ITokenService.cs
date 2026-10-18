@@ -33,5 +33,5 @@ public abstract record RefreshOutcome
 
     public sealed record Superseded : RefreshOutcome;
 
-    public sealed record ReuseDetected : RefreshOutcome;
+    public sealed record ReuseDetected(Guid UserId) : RefreshOutcome;
 }

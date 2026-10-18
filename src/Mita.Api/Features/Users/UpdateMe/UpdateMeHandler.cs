@@ -15,6 +15,7 @@ public sealed class UpdateMeHandler(
     AppDbContext db,
     UserManager<AppUser> userManager,
     ITokenService tokens,
+    SecurityStampCache stamps,
     ICurrentUser currentUser)
     : IRequestHandler<UpdateMeCommand, Result<UpdateMeResponse>>
 {
@@ -90,6 +91,11 @@ public sealed class UpdateMeHandler(
             }
 
             await transaction.CommitAsync(cancellationToken);
+
+            if (emailChanged)
+            {
+                await stamps.InvalidateAsync(user.Id);
+            }
 
             return new UpdateMeResponse(UserDto.From(user), issued);
         }
