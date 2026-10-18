@@ -1,0 +1,29 @@
+using System.Net;
+using System.Text.Json;
+using Mita.Api.IntegrationTests.Infrastructure;
+using Shouldly;
+
+namespace Mita.Api.IntegrationTests;
+
+public sealed class ErrorHandlingTests(MitaApiFactory factory) : IClassFixture<MitaApiFactory>
+{
+    [Fact]
+    public async Task Should_ReturnProblemDetails_When_HandlerThrows()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/test/throw", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.ShouldNotContain("exception", Case.Insensitive);
+        body.ShouldNotContain("stackTrace", Case.Insensitive);
+        body.ShouldNotContain("detail", Case.Insensitive);
+        using var json = JsonDocument.Parse(body);
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Server error");
+        json.RootElement.GetProperty("status").GetInt32().ShouldBe(500);
+        json.RootElement.GetProperty("correlationId").GetString()
+            .ShouldBe(response.Headers.GetValues("X-Correlation-Id").ShouldHaveSingleItem());
+    }
+}
