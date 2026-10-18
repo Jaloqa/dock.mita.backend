@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Net.Http.Headers;
 using Mita.Api.IntegrationTests.Infrastructure;
+using Mita.Domain.Money;
 using Mita.Domain.Users;
 using Mita.Infrastructure.Persistence;
 using Shouldly;

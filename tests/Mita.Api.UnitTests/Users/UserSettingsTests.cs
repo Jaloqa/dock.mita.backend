@@ -1,3 +1,4 @@
+using Mita.Domain.Money;
 using Mita.Domain.Users;
 using Shouldly;
 

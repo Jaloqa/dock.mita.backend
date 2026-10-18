@@ -1,3 +1,5 @@
+using Mita.Domain.Money;
+
 namespace Mita.Domain.Users;
 
 public sealed class UserSettings
