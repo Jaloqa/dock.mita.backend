@@ -1,11 +1,15 @@
 namespace Mita.Api.IntegrationTests.Infrastructure;
 
-public sealed class ManualTimeProvider : TimeProvider
+public sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
 {
     private readonly Lock gate = new();
     private readonly List<ManualTimer> timers = [];
-    private readonly DateTimeOffset start = DateTimeOffset.UtcNow;
     private TimeSpan offset;
+
+    public ManualTimeProvider()
+        : this(DateTimeOffset.UtcNow)
+    {
+    }
 
     public override DateTimeOffset GetUtcNow()
     {

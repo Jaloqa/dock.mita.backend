@@ -11,6 +11,7 @@ using Mita.Infrastructure.Caching;
 using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
 using Mita.Infrastructure.Persistence.Interceptors;
+using Mita.Infrastructure.Rates;
 using StackExchange.Redis;
 
 namespace Mita.Infrastructure;
@@ -46,6 +47,27 @@ public static class DependencyInjection
         services.AddHostedService(provider => provider.GetRequiredService<SecurityStampEvictions>());
 
         services.AddCaching();
+        services.AddRates();
+
+        return services;
+    }
+
+    public static IServiceCollection AddRates(this IServiceCollection services)
+    {
+        services.AddOptions<RatesOptions>()
+            .BindConfiguration(RatesOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<RatesOptions>, RatesOptionsValidator>();
+
+        services.AddHttpClient<IExchangeRateSource, NbpExchangeRateSource>((provider, client) =>
+            {
+                var baseUrl = provider.GetRequiredService<IOptions<RatesOptions>>().Value.NbpBaseUrl.AbsoluteUri;
+                client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
+            })
+            .AddStandardResilienceHandler();
+
+        services.AddScoped<RatesSynchronizer>();
+        services.AddHostedService<RatesSyncService>();
 
         return services;
     }
