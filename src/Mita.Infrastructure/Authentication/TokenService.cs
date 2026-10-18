@@ -43,7 +43,7 @@ public sealed class TokenService(AppDbContext db, IOptions<JwtOptions> jwt, Time
         {
             if (stored.ReplacedByHash is not null && now - stored.RevokedAt.Value <= RotationGracePeriod)
             {
-                return new RefreshOutcome.Invalid();
+                return new RefreshOutcome.Superseded();
             }
 
             await RevokeFamilyByIdAsync(stored.FamilyId, now, ct);
@@ -71,7 +71,7 @@ public sealed class TokenService(AppDbContext db, IOptions<JwtOptions> jwt, Time
         if (claimed == 0)
         {
             await transaction.RollbackAsync(ct);
-            return new RefreshOutcome.Invalid();
+            return new RefreshOutcome.Superseded();
         }
 
         db.RefreshTokens.Add(replacement);
@@ -79,6 +79,15 @@ public sealed class TokenService(AppDbContext db, IOptions<JwtOptions> jwt, Time
         await transaction.CommitAsync(ct);
 
         return new RefreshOutcome.Rotated(tokens, user);
+    }
+
+    public async Task<Guid?> FindOwnerAsync(string refreshToken, CancellationToken ct)
+    {
+        var hash = Hash(refreshToken);
+        return await db.RefreshTokens.AsNoTracking()
+            .Where(token => token.TokenHash == hash)
+            .Select(token => (Guid?)token.UserId)
+            .FirstOrDefaultAsync(ct);
     }
 
     public async Task RevokeFamilyAsync(string refreshToken, CancellationToken ct)

@@ -8,6 +8,8 @@ public interface ITokenService
 
     Task<RefreshOutcome> RefreshAsync(string refreshToken, CancellationToken ct);
 
+    Task<Guid?> FindOwnerAsync(string refreshToken, CancellationToken ct);
+
     Task RevokeFamilyAsync(string refreshToken, CancellationToken ct);
 
     Task RevokeAllAsync(Guid userId, CancellationToken ct);
@@ -28,6 +30,8 @@ public abstract record RefreshOutcome
     public sealed record Rotated(IssuedTokens Tokens, AppUser User) : RefreshOutcome;
 
     public sealed record Invalid : RefreshOutcome;
+
+    public sealed record Superseded : RefreshOutcome;
 
     public sealed record ReuseDetected : RefreshOutcome;
 }
