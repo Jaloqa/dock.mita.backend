@@ -42,7 +42,7 @@ Agreed stack for dock.mita (frontend, backend, infrastructure). Items marked TBD
 | Serilog + Elastic APM | Structured logging, distributed tracing, metrics, query profiling |
 | Dapper | Micro-ORM for complex queries, alongside EF Core |
 | Minimal APIs | HTTP endpoints without controllers, fits Vertical Slice |
-| MediatR (TBD) | Mediator pattern, CQRS, pipeline behaviors |
+| MediatR 12.5.0 | Mediator pattern, CQRS, pipeline behaviors (last Apache-2.0 release, do not upgrade) |
 | FluentValidation | Validation rules in separate classes |
 | Vertical Slice | Each feature owns endpoint, handler, model and validation |
 | PostgreSQL | Relational database (replaces Oracle) |
@@ -61,7 +61,7 @@ Agreed stack for dock.mita (frontend, backend, infrastructure). Items marked TBD
 |---|---|
 | xUnit | Unit and integration tests for .NET |
 | Playwright | End-to-end UI tests, cross-browser, screenshot comparison |
-| Testcontainers (TBD) | Real PostgreSQL and Redis in Docker for integration tests |
+| Testcontainers | Real PostgreSQL and Redis in Docker for integration tests |
 | Moq | Mocks in .NET tests |
 | Bogus | Realistic fake test data |
 | JUnit XML | Test report format for CI |
