@@ -1,6 +1,7 @@
 using Mita.Api.Extensions;
 using Mita.Api.Features.System;
 using Mita.Api.Middleware;
+using Mita.Api.Testing;
 using Mita.Infrastructure;
 using Serilog;
 
@@ -20,6 +21,7 @@ var app = builder.Build();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
+app.UseMitaStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapMitaHealth();

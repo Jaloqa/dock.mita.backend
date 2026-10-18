@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace Mita.Api.IntegrationTests.Infrastructure;
 
-public sealed class MitaApiFactory(PostgresFixture postgres) : WebApplicationFactory<Program>
+public sealed class MitaApiFactory(PostgresFixture postgres, RedisFixture redis) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -13,6 +13,7 @@ public sealed class MitaApiFactory(PostgresFixture postgres) : WebApplicationFac
             new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Mita"] = postgres.ConnectionString,
+                ["ConnectionStrings:Redis"] = redis.ConnectionString,
                 ["Jwt:Issuer"] = TestTokens.Issuer,
                 ["Jwt:Audience"] = TestTokens.Audience,
                 ["Jwt:SigningKey"] = TestTokens.SigningKey
