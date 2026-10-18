@@ -7,4 +7,6 @@ public interface ICachedQuery
     IReadOnlyCollection<string> CacheTags { get; }
 
     TimeSpan? CacheExpiration { get; }
+
+    bool IsUserScoped => true;
 }

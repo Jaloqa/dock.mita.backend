@@ -6,6 +6,8 @@ using Mita.Api.Authentication;
 using Mita.Api.Behaviors;
 using Mita.Api.Common;
 using Mita.Api.Common.Caching;
+using Mita.Api.Common.Rates;
+using Mita.Infrastructure.Caching;
 using Moq;
 using Shouldly;
 
@@ -272,6 +274,49 @@ public sealed class CachingBehaviorTests : IDisposable
         result.Value.ShouldBe("caller");
     }
 
+    [Fact]
+    public async Task Should_UseGlobalKey_When_QueryIsNotUserScoped()
+    {
+        handler.SetupSequence(h => h.Handle()).Returns("first").Returns("second").Returns("third");
+        var firstUser = CreateGlobalBehavior(Guid.NewGuid());
+        var secondUser = CreateGlobalBehavior(Guid.NewGuid());
+
+        var first = await firstUser.Handle(new GlobalQuery("a"), Next, TestContext.Current.CancellationToken);
+        var second = await secondUser.Handle(new GlobalQuery("a"), Next, TestContext.Current.CancellationToken);
+        await Cache.RemoveAsync("g:global:a", TestContext.Current.CancellationToken);
+        var afterKeyRemoval = await secondUser.Handle(new GlobalQuery("a"), Next, TestContext.Current.CancellationToken);
+        await Cache.RemoveByTagAsync("g:global", TestContext.Current.CancellationToken);
+        var afterTagRemoval = await firstUser.Handle(new GlobalQuery("a"), Next, TestContext.Current.CancellationToken);
+
+        first.Value.ShouldBe("first");
+        second.Value.ShouldBe("first");
+        afterKeyRemoval.Value.ShouldBe("second");
+        afterTagRemoval.Value.ShouldBe("third");
+        handler.Verify(h => h.Handle(), Times.Exactly(3));
+    }
+
+    [Fact]
+    public void Should_MatchGlobalRatesTag_When_ApiTagIsPrefixed() =>
+        GlobalCacheTags.Rates.ShouldBe(CacheKeys.Global(RateCacheTags.Rates));
+
+    [Fact]
+    public async Task Should_NotReadCurrentUser_When_QueryIsNotUserScoped()
+    {
+        handler.Setup(h => h.Handle()).Returns("value");
+        var currentUser = new Mock<ICurrentUser>(MockBehavior.Strict);
+        var behavior = new CachingBehavior<GlobalQuery, Result<string>>(
+            Cache,
+            currentUser.Object,
+            NullLogger<CachingBehavior<GlobalQuery, Result<string>>>.Instance);
+
+        var result = await behavior.Handle(new GlobalQuery("a"), Next, TestContext.Current.CancellationToken);
+
+        result.Value.ShouldBe("value");
+    }
+
+    private CachingBehavior<GlobalQuery, Result<string>> CreateGlobalBehavior(Guid userId) =>
+        new(Cache, CurrentUser(userId), NullLogger<CachingBehavior<GlobalQuery, Result<string>>>.Instance);
+
     private CachingBehavior<SampleQuery, Result<string>> CreateBehavior(Guid userId) =>
         new(Cache, CurrentUser(userId), NullLogger<CachingBehavior<SampleQuery, Result<string>>>.Instance);
 
@@ -320,6 +365,17 @@ public sealed class CachingBehaviorTests : IDisposable
         public string CacheKey => $"sample:{Name}";
 
         public IReadOnlyCollection<string> CacheTags => ["sample"];
+
+        public TimeSpan? CacheExpiration => null;
+    }
+
+    public sealed record GlobalQuery(string Name) : IRequest<Result<string>>, ICachedQuery
+    {
+        public bool IsUserScoped => false;
+
+        public string CacheKey => $"global:{Name}";
+
+        public IReadOnlyCollection<string> CacheTags => ["global"];
 
         public TimeSpan? CacheExpiration => null;
     }

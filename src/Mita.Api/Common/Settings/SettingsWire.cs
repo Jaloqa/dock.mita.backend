@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Mita.Api.Common.Json;
+using Mita.Api.Common.Money;
 using Mita.Domain.Money;
 using Mita.Domain.Users;
 
@@ -7,14 +8,7 @@ namespace Mita.Api.Common.Settings;
 
 public static class SettingsWire
 {
-    public static string ToWire(Currency currency) => currency switch
-    {
-        Currency.PLN => "PLN",
-        Currency.EUR => "EUR",
-        Currency.USD => "USD",
-        Currency.UAH => "UAH",
-        _ => throw new ArgumentOutOfRangeException(nameof(currency), currency, null)
-    };
+    public static string ToWire(Currency currency) => CurrencyWire.ToWire(currency);
 
     public static string ToWire(Locale locale) => locale switch
     {
@@ -36,18 +30,8 @@ public static class SettingsWire
     public static bool IsMissing(JsonElement? element) =>
         element is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined };
 
-    public static bool TryParseCurrency(JsonElement? element, out Currency currency)
-    {
-        (currency, var ok) = Text(element) switch
-        {
-            "PLN" => (Currency.PLN, true),
-            "EUR" => (Currency.EUR, true),
-            "USD" => (Currency.USD, true),
-            "UAH" => (Currency.UAH, true),
-            _ => (default(Currency), false)
-        };
-        return ok;
-    }
+    public static bool TryParseCurrency(JsonElement? element, out Currency currency) =>
+        CurrencyWire.TryParse(element, out currency);
 
     public static bool TryParseLocale(JsonElement? element, out Locale locale)
     {
