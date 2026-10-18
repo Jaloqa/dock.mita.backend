@@ -14,6 +14,18 @@ public sealed class OptionsValidatorTests
             .Succeeded.ShouldBe(valid);
 
     [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public void Should_RequirePositiveSessionPermitLimit_When_ValidatingRateLimitingOptions(int limit, bool valid) =>
+        new RateLimitingOptionsValidator()
+            .Validate(null, new RateLimitingOptions { SessionPermitLimit = limit })
+            .Succeeded.ShouldBe(valid);
+
+    [Fact]
+    public void Should_AllowSixtySessionRequests_When_NotConfigured() =>
+        new RateLimitingOptions().SessionPermitLimit.ShouldBe(60);
+
+    [Theory]
     [InlineData("10.0.0.5", "10.0.0.0/8", true)]
     [InlineData("::1", "fd00::/8", true)]
     [InlineData("10.0.0.300", "10.0.0.0/8", false)]
