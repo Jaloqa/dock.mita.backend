@@ -48,6 +48,7 @@ Agreed stack for dock.mita (frontend, backend, infrastructure). Items marked TBD
 | PostgreSQL | Relational database (replaces Oracle) |
 | Pagination | Cursor-based or offset pagination for list endpoints |
 | Polly | Resilience for outgoing HTTP: retry, circuit breaker, timeout, bulkhead |
+| Microsoft.Extensions.Http.Resilience | Standard Polly v8 resilience handler for `HttpClient` (retry, circuit breaker, timeouts), used for the NBP rates client |
 | MS Identity + JWT | Authentication with JWT; sticky sessions for routing to cluster nodes |
 | API versioning | Parallel v1/v2 without breaking clients (`Asp.Versioning`) |
 | RBAC | Role-based access control |
