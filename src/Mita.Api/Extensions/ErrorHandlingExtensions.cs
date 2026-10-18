@@ -13,6 +13,8 @@ public static class ErrorHandlingExtensions
                 context.ProblemDetails.Extensions["correlationId"] = correlationId;
             }
         });
+        services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+        services.AddExceptionHandler<BadRequestExceptionHandler>();
         services.AddExceptionHandler<UnhandledExceptionHandler>();
         return services;
     }
@@ -22,6 +24,8 @@ public static class ErrorHandlingExtensions
         endpoints.MapGet(
             "/test/throw",
             IResult () => throw new InvalidOperationException("Test failure")).AllowAnonymous();
+
+        endpoints.MapPost("/test/echo", (EchoBody body) => Results.Ok(body)).AllowAnonymous();
 
         return endpoints;
     }
