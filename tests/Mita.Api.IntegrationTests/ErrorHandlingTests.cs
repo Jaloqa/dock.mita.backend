@@ -24,6 +24,37 @@ public sealed class ErrorHandlingTests(MitaApiFactory factory) : IClassFixture<M
     }
 
     [Fact]
+    public async Task Should_ReturnNotFoundProblem_When_RouteDoesNotExist()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/v1/does-not-exist", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        using var json = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        json.RootElement.GetProperty("status").GetInt32().ShouldBe(404);
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Not Found");
+        json.RootElement.GetProperty("correlationId").GetString()
+            .ShouldBe(response.Headers.GetValues("X-Correlation-Id").ShouldHaveSingleItem());
+    }
+
+    [Fact]
+    public async Task Should_ReturnMethodNotAllowedProblem_When_MethodDoesNotMatch()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.DeleteAsync("/test/echo", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        using var json = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Method Not Allowed");
+    }
+
+    [Fact]
     public async Task Should_ReturnProblemDetails_When_HandlerThrows()
     {
         using var client = factory.CreateClient();

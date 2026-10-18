@@ -33,6 +33,24 @@ public sealed class RequestBindingTests(MitaApiFactory factory) : IClassFixture<
     }
 
     [Fact]
+    public async Task Should_Return415_When_ContentTypeIsNotJson()
+    {
+        using var client = factory.CreateClient();
+        using var content = new StringContent("{\"value\":7}", Encoding.UTF8, "text/plain");
+
+        using var response = await client.PostAsync("/test/echo", content, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        using var json = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        json.RootElement.GetProperty("status").GetInt32().ShouldBe(415);
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Unsupported Media Type");
+        json.RootElement.GetProperty("correlationId").GetString()
+            .ShouldBe(response.Headers.GetValues("X-Correlation-Id").ShouldHaveSingleItem());
+    }
+
+    [Fact]
     public async Task Should_ReturnBody_When_BodyIsValid()
     {
         using var client = factory.CreateClient();

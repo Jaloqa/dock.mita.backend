@@ -31,4 +31,29 @@ public sealed class BadRequestExceptionHandlerTests
             cancellationToken: TestContext.Current.CancellationToken);
         json.RootElement.GetProperty("errors").EnumerateObject().Select(p => p.Name).ShouldBe([field]);
     }
+
+    [Theory]
+    [InlineData(StatusCodes.Status413PayloadTooLarge, "Payload Too Large")]
+    [InlineData(StatusCodes.Status415UnsupportedMediaType, "Unsupported Media Type")]
+    public async Task Should_ReturnProblemWithStatus_When_BadRequestIsNot400(int status, string title)
+    {
+        await using var services = new ServiceCollection().AddLogging().AddProblemDetails().BuildServiceProvider();
+        var context = new DefaultHttpContext { RequestServices = services };
+        context.Response.Body = new MemoryStream();
+
+        var handled = await new BadRequestExceptionHandler().TryHandleAsync(
+            context,
+            new BadHttpRequestException("Rejected", status),
+            TestContext.Current.CancellationToken);
+
+        handled.ShouldBeTrue();
+        context.Response.StatusCode.ShouldBe(status);
+        context.Response.Body.Position = 0;
+        using var json = await JsonDocument.ParseAsync(
+            context.Response.Body,
+            cancellationToken: TestContext.Current.CancellationToken);
+        json.RootElement.GetProperty("status").GetInt32().ShouldBe(status);
+        json.RootElement.GetProperty("title").GetString().ShouldBe(title);
+        json.RootElement.TryGetProperty("errors", out _).ShouldBeFalse();
+    }
 }
