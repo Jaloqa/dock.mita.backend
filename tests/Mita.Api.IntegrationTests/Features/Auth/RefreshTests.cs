@@ -12,6 +12,8 @@ namespace Mita.Api.IntegrationTests.Features.Auth;
 
 public sealed class RefreshTests(MitaApiFactory factory) : IClassFixture<MitaApiFactory>
 {
+    private const string MePath = "/v1/me";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -90,6 +92,39 @@ public sealed class RefreshTests(MitaApiFactory factory) : IClassFixture<MitaApi
 
         await AssertSessionExpiredAsync(replay);
         await AssertSessionExpiredAsync(current);
+    }
+
+    [Fact]
+    public async Task Should_RejectThiefAccessToken_When_RealClientReplaysRotatedRefreshToken()
+    {
+        var clock = new TestTimeProvider();
+        await using var timed = WithClock(clock);
+        using var victim = new AuthClient(timed);
+        await victim.RegisterNewAsync(Ct);
+        var stolen = victim.Cookie("mita_rt", "/v1/auth/")!.Value;
+
+        using var thief = new AuthClient(timed);
+        thief.SetRefreshCookie(stolen);
+        using (var rotated = await thief.RefreshAsync(Ct))
+        {
+            rotated.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        using (var before = await thief.Http.GetAsync(MePath, Ct))
+        {
+            before.StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
+
+        clock.Advance(TimeSpan.FromSeconds(TokenService.RotationGracePeriod.TotalSeconds + 1));
+        using (var replay = await victim.RefreshAsync(Ct))
+        {
+            await AssertSessionExpiredAsync(replay);
+        }
+
+        using var after = await thief.Http.GetAsync(MePath, Ct);
+        after.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        var problem = await after.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        problem.GetProperty("code").GetString().ShouldBe("auth.sessionExpired");
     }
 
     [Fact]

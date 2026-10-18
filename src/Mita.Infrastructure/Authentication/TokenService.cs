@@ -16,8 +16,10 @@ public sealed class TokenService(AppDbContext db, IOptions<JwtOptions> jwt, Time
 
     public static readonly TimeSpan RotationGracePeriod = TimeSpan.FromSeconds(30);
 
+    public const string StampClaim = "stamp";
+
     private const int RefreshTokenBytes = 32;
-    private const string StampClaim = "stamp";
+    private const int SecurityStampBytes = 20;
 
     public async Task<IssuedTokens> IssueAsync(AppUser user, Guid? familyId, CancellationToken ct)
     {
@@ -47,7 +49,8 @@ public sealed class TokenService(AppDbContext db, IOptions<JwtOptions> jwt, Time
             }
 
             await RevokeFamilyByIdAsync(stored.FamilyId, now, ct);
-            return new RefreshOutcome.ReuseDetected();
+            await RotateSecurityStampAsync(stored.UserId, ct);
+            return new RefreshOutcome.ReuseDetected(stored.UserId);
         }
 
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == stored.UserId, ct);
@@ -116,6 +119,20 @@ public sealed class TokenService(AppDbContext db, IOptions<JwtOptions> jwt, Time
         db.RefreshTokens
             .Where(token => token.FamilyId == familyId && token.RevokedAt == null)
             .ExecuteUpdateAsync(set => set.SetProperty(token => token.RevokedAt, now), ct);
+
+    private Task<int> RotateSecurityStampAsync(Guid userId, CancellationToken ct)
+    {
+        var securityStamp = Convert.ToHexString(RandomNumberGenerator.GetBytes(SecurityStampBytes));
+        var concurrencyStamp = Guid.NewGuid().ToString();
+
+        return db.Users
+            .Where(user => user.Id == userId)
+            .ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(user => user.SecurityStamp, securityStamp)
+                    .SetProperty(user => user.ConcurrencyStamp, concurrencyStamp),
+                ct);
+    }
 
     private IssuedTokens Create(AppUser user, Guid familyId, out RefreshToken entity)
     {

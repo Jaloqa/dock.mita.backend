@@ -41,6 +41,9 @@ public static class DependencyInjection
         services.AddHealthChecks().AddDbContextCheck<AppDbContext>("postgres", tags: [ReadyTag]);
 
         services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<SecurityStampCache>();
+        services.AddSingleton<SecurityStampEvictions>();
+        services.AddHostedService(provider => provider.GetRequiredService<SecurityStampEvictions>());
 
         services.AddCaching();
 
