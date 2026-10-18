@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Net.Http.Headers;
 using Mita.Api.Authentication;
 using Mita.Api.Common;
 using Mita.Infrastructure.Authentication;
@@ -57,6 +58,17 @@ public static class AuthExtensions
 
         bearer.Events = new JwtBearerEvents
         {
+            OnMessageReceived = context =>
+            {
+                if (!context.Request.Headers.ContainsKey(HeaderNames.Authorization)
+                    && context.Request.Cookies[AuthCookies.AccessToken] is { Length: > 0 } token)
+                {
+                    context.Token = token;
+                    context.HttpContext.MarkCookieAuthenticated();
+                }
+
+                return Task.CompletedTask;
+            },
             OnTokenValidated = context =>
             {
                 if (!CurrentUser.TryReadId(context.Principal, out _))

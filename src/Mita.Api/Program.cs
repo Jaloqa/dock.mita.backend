@@ -1,3 +1,4 @@
+using Mita.Api.Authentication;
 using Mita.Api.Extensions;
 using Mita.Api.Features.Auth;
 using Mita.Api.Features.System;
@@ -32,6 +33,7 @@ app.UseRouting();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<XsrfMiddleware>();
 app.UseRateLimiter();
 app.MapMitaHealth();
 app.MapMitaOpenApi();
