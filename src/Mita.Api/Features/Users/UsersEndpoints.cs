@@ -10,6 +10,7 @@ public static class UsersEndpoints
     public static IEndpointRouteBuilder MapUsersEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapV1()
+            .WithTags("Users")
             .MapGetMe()
             .MapUpdateMe()
             .MapDeleteMe();
