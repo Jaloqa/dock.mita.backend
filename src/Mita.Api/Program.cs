@@ -18,6 +18,8 @@ builder.Services.AddMitaOpenApi();
 
 var app = builder.Build();
 
+await app.ApplyMitaMigrationsAsync();
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();

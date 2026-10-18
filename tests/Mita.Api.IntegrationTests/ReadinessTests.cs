@@ -24,7 +24,8 @@ public sealed class ReadinessTests(MitaApiFactory factory) : IClassFixture<MitaA
         await using var unreachable = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(
             (_, configuration) => configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:Mita"] = "Host=127.0.0.1;Port=1;Database=mita;Timeout=2"
+                ["ConnectionStrings:Mita"] = "Host=127.0.0.1;Port=1;Database=mita;Timeout=2",
+                ["Database:ApplyMigrationsOnStartup"] = "false"
             })));
         using var client = unreachable.CreateClient();
 

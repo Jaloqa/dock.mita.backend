@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Mita.Infrastructure.Caching;
+using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
 using Mita.Infrastructure.Persistence.Interceptors;
 using StackExchange.Redis;
@@ -23,9 +24,13 @@ public static class DependencyInjection
 
         services.AddOptions<DatabaseOptions>()
             .Configure<IConfiguration>((options, root) =>
-                options.ConnectionString = root.GetConnectionString(DatabaseOptions.ConnectionStringName) ?? string.Empty)
+            {
+                options.ConnectionString = root.GetConnectionString(DatabaseOptions.ConnectionStringName) ?? string.Empty;
+                options.ApplyMigrationsOnStartupRaw = root[DatabaseOptions.ApplyMigrationsOnStartupKey];
+            })
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
+        services.AddMitaIdentity();
 
         services.AddSingleton<AuditingInterceptor>();
         services.AddDbContext<AppDbContext>((provider, options) => options
