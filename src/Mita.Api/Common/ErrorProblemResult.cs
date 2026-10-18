@@ -33,7 +33,9 @@ internal sealed class ErrorProblemResult(Error error) : IResult
                 unauthorized.Extensions["code"] = error.Code;
                 return unauthorized;
             case ErrorType.Forbidden:
-                return new ProblemDetails { Status = StatusCodes.Status403Forbidden, Title = "Forbidden" };
+                var forbidden = new ProblemDetails { Status = StatusCodes.Status403Forbidden, Title = "Forbidden" };
+                forbidden.Extensions["code"] = error.Code;
+                return forbidden;
             default:
                 throw new ArgumentOutOfRangeException(nameof(error), error.Type, "Unknown error type.");
         }

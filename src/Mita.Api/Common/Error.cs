@@ -23,4 +23,6 @@ public sealed record Error(ErrorType Type, string Code, IReadOnlyDictionary<stri
     public static Error Unauthorized(string code) => new(ErrorType.Unauthorized, code);
 
     public static Error Forbidden() => new(ErrorType.Forbidden, "forbidden");
+
+    public static Error Forbidden(string code) => new(ErrorType.Forbidden, code);
 }
