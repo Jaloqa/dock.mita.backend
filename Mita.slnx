@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mita.Api/Mita.Api.csproj" />
+    <Project Path="src/Mita.Domain/Mita.Domain.csproj" />
+    <Project Path="src/Mita.Infrastructure/Mita.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Mita.Api.IntegrationTests/Mita.Api.IntegrationTests.csproj" />
+    <Project Path="tests/Mita.Api.UnitTests/Mita.Api.UnitTests.csproj" />
+  </Folder>
+</Solution>
