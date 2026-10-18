@@ -1,4 +1,4 @@
-# API contract: authentication, users and settings
+# API contract: authentication, users, settings, accounts, transfers and rates
 
 This document describes the HTTP contract of API version 1 for the frontend switch-over from mocks to the real backend. The OpenAPI document is served at `/openapi/v1.json`, and Scalar at `/scalar` in the Development environment.
 
@@ -17,6 +17,13 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | DELETE | `/v1/me` | required | `{ password }` | 204, clears cookies | 400, 401, 403, 429 |
 | GET | `/v1/settings` | required | none | 200 `Settings` | 401 |
 | PUT | `/v1/settings` | required | `Settings` | 200 `Settings` | 400, 401, 403 |
+| GET | `/v1/accounts?page&pageSize` | required | none | 200 `Page<Account>` | 400, 401 |
+| POST | `/v1/accounts` | required | `AccountInput` | 201 `Account`, `Location` header | 400, 401, 403 |
+| PUT | `/v1/accounts/{id}` | required | `AccountInput` | 200 `Account` | 400, 401, 403, 404 |
+| DELETE | `/v1/accounts/{id}` | required | none | 204 | 400, 401, 403, 404 |
+| GET | `/v1/transfers?accountId&page&pageSize` | required | none | 200 `Page<Transfer>` | 400, 401 |
+| POST | `/v1/transfers` | required | `TransferInput` | 201 `Transfer`, no `Location` header | 400, 401, 403, 503 |
+| GET | `/v1/rates?date&from&to` | required | none | 200 `Rate[]` | 400, 401 |
 
 "required" means a valid access token, sent either in the `mita_at` cookie or as an `Authorization: Bearer <token>` header. Cookie authentication is what the browser frontend uses. Requests authenticated with the Bearer header are exempt from the XSRF check.
 
@@ -45,6 +52,64 @@ type Settings = {
     weeklyReport: boolean;
     goals: boolean;
   };
+};
+
+type Page<T> = {
+  items: T[];
+  page: number;      // 1-based
+  pageSize: number;
+  total: number;
+};
+
+type Currency = 'PLN' | 'EUR' | 'USD' | 'UAH';
+
+type Account = {
+  id: string;             // GUID
+  name: string;
+  type: 'card' | 'cash' | 'savings';
+  currency: Currency;
+  openingBalance: number; // minor units
+  balance: number;        // minor units, computed by the server: openingBalance plus every transfer leg
+  cardLast4: string | null;
+  archived: boolean;
+  inUse: boolean;         // the account has at least one transfer
+  linkedGoals: number;    // always 0 until goals exist
+};
+
+type AccountInput = {
+  name: string;           // 1 to 40 characters after trimming, no control characters
+  type: 'card' | 'cash' | 'savings';
+  currency: Currency;
+  openingBalance: number; // integer minor units, absolute value up to 100000000000
+  cardLast4?: string | null; // exactly 4 digits; stored only for type "card"
+  archived?: boolean;        // omitted on update keeps the current value
+};
+
+type Transfer = {
+  id: string;             // GUID
+  date: string;           // YYYY-MM-DD
+  fromAccountId: string;
+  toAccountId: string;
+  fromAmount: number;     // minor units of the source account currency
+  toAmount: number;       // minor units of the target account currency
+  rate: number;           // 1 for the same currency
+  note: string | null;
+};
+
+type TransferInput = {
+  date: string;           // YYYY-MM-DD, at most one year after today (UTC)
+  fromAccountId: string;
+  toAccountId: string;
+  fromAmount: number;     // integer minor units, 1 to 100000000000
+  rate?: number;          // manual rate, 0 < rate <= 1000000; not used for the same currency, but still validated
+  note?: string | null;   // up to 200 characters after trimming
+};
+
+type Rate = {
+  date: string;           // YYYY-MM-DD, the requested date (today in UTC when omitted)
+  from: Currency;
+  to: Currency;
+  value: number;          // units of "to" per 1 unit of "from"
 };
 ```
 
@@ -131,7 +196,15 @@ Every error is an RFC 9457 `application/problem+json` document:
 | `validation.passwordTooShort` | register: fewer than 10 characters |
 | `validation.passwordTooLong` | register: more than 128 characters |
 | `validation.invalidPassword` | `DELETE /v1/me`: the password is wrong, or the account is locked after repeated failures (field `password`) |
-| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character |
+| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value, a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 (reported under `rate`). In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `date`, `from` or `to` |
+| `validation.currencyLocked` | `PUT /v1/accounts/{id}`: the currency of an account that is in use cannot change (field `currency`) |
+| `validation.cardLast4` | `cardLast4` is present, not blank and not exactly 4 digits. Checked for every account type |
+| `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers, so it can only be archived (field `id`) |
+| `validation.dateTooFar` | transfer `date` is later than today plus one year |
+| `validation.unknownAccount` | transfer `fromAccountId` or `toAccountId` is not one of the user's accounts |
+| `validation.archivedAccount` | transfer `fromAccountId` or `toAccountId` is an archived account |
+| `validation.sameAccount` | transfer `toAccountId` equals `fromAccountId` |
+| `validation.positiveAmount` | transfer `fromAmount` is 0 or negative, or the converted amount rounds to 0 (reported under `rate`) |
 
 ### Other error codes
 
@@ -146,6 +219,7 @@ Every error is an RFC 9457 `application/problem+json` document:
 | 409 | `user.concurrentUpdate` | `PUT /v1/me` | the account was changed by another request at the same time. Reload and retry |
 | 429 | title "Too many requests" | `/v1/auth/*` and `DELETE /v1/me` | rate limit exceeded. The `Retry-After` header holds the wait in seconds. On refresh it does not mean the session ended: wait and retry |
 | 500 | title "Server error" | any | unexpected failure. Report the `correlationId` |
+| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers` | a cross-currency transfer without a manual `rate` while no exchange rates are stored yet. Retry later or send a manual `rate` |
 
 ### Rate limiting and lockout
 
@@ -157,3 +231,37 @@ Requests are counted per client IP address per minute, in two separate buckets:
 A 429 from refresh means "wait for `Retry-After` seconds and retry", never "logged out".
 
 After 5 failed password attempts the account is locked for 15 minutes. Failures are counted together on login and on `DELETE /v1/me`. A locked account answers like a wrong password.
+
+## Accounts, transfers and rates
+
+All amounts are integers in minor units (grosze, cents). The absolute value of an amount is at most 100000000000. JSON numbers with a zero fraction, such as `5.0`, count as integers. Every account and transfer belongs to the current user, and an id of another user answers exactly like an unknown id (404).
+
+Validation reports the first failing rule for each field and returns all failing fields in one 400. A body field of the wrong JSON type gives a field error, for example `openingBalance: ["validation.invalidValue"]`, not an error under `body`. A whitespace-only string counts as missing (`validation.required`).
+
+Validation runs before the lookup. An invalid body sent to an unknown account id answers 400, and only a valid body gives 404 for an unknown or foreign id.
+
+### Accounts
+
+- `GET /v1/accounts`: `pageSize` defaults to 100 (maximum 100). Accounts are ordered by creation time.
+- `balance` is `openingBalance` plus the sum of the account's transfer legs, computed by the server. `inUse` is true when the account has any transfer. `linkedGoals` is always 0 for now.
+- `DELETE` removes an account that has no history. An account in use answers 400 `id: ["validation.accountInUse"]`: archive it with `PUT` and `archived: true` instead. Deleting a missing id answers 404.
+- `PUT` replaces the editable fields. The currency of an account in use cannot change (`validation.currencyLocked`).
+- `cardLast4` is validated for every type but stored only for `card`; other types answer `null`.
+
+### Transfers
+
+- `GET /v1/transfers`: `pageSize` defaults to 20 (maximum 100). `accountId` matches transfers on either side. A value that is not a GUID answers 400 `accountId: ["validation.invalidValue"]`. Transfers are ordered newest first (`date`, then creation time).
+- Transfers cannot be edited or deleted.
+- For accounts in the same currency the `rate` is 1 and `toAmount` equals `fromAmount`. Otherwise the server uses the manual `rate` when sent, and the exchange rate of the transfer `date` when not. `toAmount` is `fromAmount` times the rate, rounded to a whole minor unit (half away from zero). A manual rate is rounded to 6 decimals first.
+- A manual `rate` must be a JSON number with `0 < rate <= 1000000`. A converted amount that rounds to 0 answers `rate: ["validation.positiveAmount"]`. A converted amount above 100000000000 answers `rate: ["validation.invalidValue"]`.
+- A transfer stores its `rate` and `toAmount`. They never change when exchange rates change later.
+- Without a manual rate and without any stored exchange rates the answer is 503 with code `rates.unavailable`.
+
+### Rates
+
+- Rates come from the National Bank of Poland (NBP, table A mid rates) for PLN, EUR, USD and UAH. A background job in the API loads them on start and every 6 hours, and requests never call NBP. The first run backfills about 183 days. If NBP is unreachable, the API keeps serving the stored rates.
+- `GET /v1/rates` returns a plain array, not a `Page`. This is the one exception to "every collection is paginated": there are at most 12 pairs.
+- `date`, `from` and `to` are all optional. An omitted `date` means today's UTC date, and every `Rate` echoes the requested or resolved date in `date`. Without `from` and `to` every currency pair is returned, never a pair with `from == to`.
+- For a date, the rate of each currency is the latest stored one on or before that date. For weekends, holidays and future dates that is the latest earlier rate, and for a date before the history start it is the earliest stored rate. Cross rates go through PLN and are rounded to 6 decimals.
+- Pairs whose currencies have no stored rate are omitted, so the array can be empty right after the first start.
+- The response is cached for up to an hour and is the same for every user.
