@@ -8,13 +8,17 @@ builder.AddMitaLogging();
 builder.Services.AddMitaErrorHandling();
 builder.Services.AddMitaHealth();
 builder.Services.AddMitaMediator();
+builder.Services.AddMitaApiVersioning();
+builder.Services.AddMitaOpenApi();
 
 var app = builder.Build();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
+app.UseAuthorization();
 app.MapMitaHealth();
+app.MapMitaOpenApi();
 
 if (app.Environment.IsEnvironment("Testing"))
 {
