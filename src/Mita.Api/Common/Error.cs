@@ -6,7 +6,8 @@ public enum ErrorType
     NotFound,
     Conflict,
     Unauthorized,
-    Forbidden
+    Forbidden,
+    Unavailable
 }
 
 public sealed record Error(ErrorType Type, string Code, IReadOnlyDictionary<string, string[]>? Fields = null)
@@ -25,4 +26,6 @@ public sealed record Error(ErrorType Type, string Code, IReadOnlyDictionary<stri
     public static Error Forbidden() => new(ErrorType.Forbidden, "forbidden");
 
     public static Error Forbidden(string code) => new(ErrorType.Forbidden, code);
+
+    public static Error Unavailable(string code) => new(ErrorType.Unavailable, code);
 }
