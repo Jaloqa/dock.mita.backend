@@ -1,0 +1,40 @@
+using Microsoft.AspNetCore.Mvc;
+
+namespace Mita.Api.Common;
+
+internal sealed class ErrorProblemResult(Error error) : IResult
+{
+    public async Task ExecuteAsync(HttpContext httpContext)
+    {
+        var problem = CreateProblem();
+        httpContext.Response.StatusCode = problem.Status!.Value;
+
+        await httpContext.RequestServices.GetRequiredService<IProblemDetailsService>().WriteAsync(
+            new ProblemDetailsContext { HttpContext = httpContext, ProblemDetails = problem });
+    }
+
+    private ProblemDetails CreateProblem()
+    {
+        switch (error.Type)
+        {
+            case ErrorType.Validation:
+                return new ValidationProblemDetails(error.Fields!.ToDictionary(f => f.Key, f => f.Value))
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Validation failed"
+                };
+            case ErrorType.NotFound:
+                return new ProblemDetails { Status = StatusCodes.Status404NotFound, Title = "Not Found" };
+            case ErrorType.Conflict:
+                var conflict = new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Conflict" };
+                conflict.Extensions["code"] = error.Code;
+                return conflict;
+            case ErrorType.Unauthorized:
+                return new ProblemDetails { Status = StatusCodes.Status401Unauthorized, Title = "Unauthorized" };
+            case ErrorType.Forbidden:
+                return new ProblemDetails { Status = StatusCodes.Status403Forbidden, Title = "Forbidden" };
+            default:
+                throw new ArgumentOutOfRangeException(nameof(error), error.Type, "Unknown error type.");
+        }
+    }
+}
