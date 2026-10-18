@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 
 namespace Mita.Api.Common;
@@ -6,6 +7,15 @@ namespace Mita.Api.Common;
 internal static class ProblemDetailsWriter
 {
     private const string ProblemJson = "application/problem+json";
+
+    public static Task WriteStatusAsync(HttpContext httpContext, int status)
+    {
+        httpContext.Response.StatusCode = status;
+
+        return WriteAsync(
+            httpContext,
+            new ProblemDetails { Status = status, Title = ReasonPhrases.GetReasonPhrase(status) });
+    }
 
     public static async Task WriteAsync(HttpContext httpContext, ProblemDetails problem)
     {
