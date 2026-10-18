@@ -79,6 +79,18 @@ public sealed class ResultHttpExtensionsTests
     }
 
     [Fact]
+    public async Task Should_MapUnauthorizedTo401WithCode()
+    {
+        Result<string> result = Error.Unauthorized("auth.invalidCredentials");
+
+        var (context, json) = await ExecuteAsync(result.ToHttp(value => Results.Ok(value)));
+
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status401Unauthorized);
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Unauthorized");
+        json.RootElement.GetProperty("code").GetString().ShouldBe("auth.invalidCredentials");
+    }
+
+    [Fact]
     public async Task Should_UseSuccessResult_When_ResultSucceeded()
     {
         Result<string> result = "hello";

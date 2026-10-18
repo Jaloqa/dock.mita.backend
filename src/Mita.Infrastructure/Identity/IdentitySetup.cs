@@ -23,6 +23,7 @@ public static class IdentitySetup
                 options.Lockout.DefaultLockoutTimeSpan = LockoutDuration;
                 options.Lockout.AllowedForNewUsers = true;
                 options.User.RequireUniqueEmail = true;
+                options.User.AllowedUserNameCharacters = string.Empty;
             })
             .AddEntityFrameworkStores<AppDbContext>();
 

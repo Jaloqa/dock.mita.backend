@@ -1,9 +1,9 @@
 using Mita.Api.Extensions;
+using Mita.Api.Features.Auth;
 using Mita.Api.Features.System;
 using Mita.Api.Middleware;
 using Mita.Api.Testing;
 using Mita.Infrastructure;
-using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +13,9 @@ builder.Services.AddMitaHealth();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddMitaMediator();
 builder.Services.AddMitaAuth();
+builder.Services.AddMitaForwardedHeaders();
+builder.Services.AddMitaCors();
+builder.Services.AddMitaRateLimiting();
 builder.Services.AddMitaApiVersioning();
 builder.Services.AddMitaOpenApi();
 
@@ -20,15 +23,20 @@ var app = builder.Build();
 
 await app.ApplyMitaMigrationsAsync();
 
+app.UseForwardedHeaders();
 app.UseMiddleware<CorrelationIdMiddleware>();
-app.UseSerilogRequestLogging();
+app.UseMitaRequestLogging();
 app.UseExceptionHandler();
 app.UseMitaStatusCodePages();
+app.UseRouting();
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapMitaHealth();
 app.MapMitaOpenApi();
 app.MapSystemEndpoints();
+app.MapAuthEndpoints();
 
 if (app.Environment.IsEnvironment("Testing"))
 {

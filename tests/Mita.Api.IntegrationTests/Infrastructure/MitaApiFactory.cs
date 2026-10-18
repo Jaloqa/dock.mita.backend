@@ -6,6 +6,10 @@ namespace Mita.Api.IntegrationTests.Infrastructure;
 
 public sealed class MitaApiFactory(PostgresFixture postgres, RedisFixture redis) : WebApplicationFactory<Program>
 {
+    public WebApplicationFactory<Program> WithSettings(IReadOnlyDictionary<string, string?> settings) =>
+        WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(
+            (_, configuration) => configuration.AddInMemoryCollection(settings)));
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -17,7 +21,8 @@ public sealed class MitaApiFactory(PostgresFixture postgres, RedisFixture redis)
                 ["Database:ApplyMigrationsOnStartup"] = "true",
                 ["Jwt:Issuer"] = TestTokens.Issuer,
                 ["Jwt:Audience"] = TestTokens.Audience,
-                ["Jwt:SigningKey"] = TestTokens.SigningKey
+                ["Jwt:SigningKey"] = TestTokens.SigningKey,
+                ["RateLimiting:AuthPermitLimit"] = "1000"
             }));
     }
 }
