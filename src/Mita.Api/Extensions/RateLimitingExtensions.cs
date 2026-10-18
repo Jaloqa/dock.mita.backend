@@ -10,6 +10,7 @@ namespace Mita.Api.Extensions;
 public static class RateLimitingExtensions
 {
     public const string AuthPolicy = "auth";
+    public const string SessionPolicy = "session";
 
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
 
@@ -23,19 +24,8 @@ public static class RateLimitingExtensions
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.AddPolicy(AuthPolicy, context =>
-            {
-                var permitLimit = context.RequestServices.GetRequiredService<IOptions<RateLimitingOptions>>()
-                    .Value.AuthPermitLimit;
-                return RateLimitPartition.GetFixedWindowLimiter(
-                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = permitLimit,
-                        Window = Window,
-                        QueueLimit = 0
-                    });
-            });
+            options.AddPolicy(AuthPolicy, context => PerClientIp(context, limits => limits.AuthPermitLimit));
+            options.AddPolicy(SessionPolicy, context => PerClientIp(context, limits => limits.SessionPermitLimit));
             options.OnRejected = async (context, _) =>
             {
                 if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
@@ -52,5 +42,20 @@ public static class RateLimitingExtensions
         });
 
         return services;
+    }
+
+    private static RateLimitPartition<string> PerClientIp(
+        HttpContext context,
+        Func<RateLimitingOptions, int> permitLimit)
+    {
+        var limit = permitLimit(context.RequestServices.GetRequiredService<IOptions<RateLimitingOptions>>().Value);
+        return RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = limit,
+                Window = Window,
+                QueueLimit = 0
+            });
     }
 }
