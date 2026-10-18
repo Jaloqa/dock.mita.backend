@@ -28,7 +28,8 @@ public sealed partial class CacheInvalidationBehavior<TRequest, TResponse>(
             return response;
         }
 
-        var tags = request.CacheTagsToInvalidate.Select(tag => CacheKeys.Tag(userId, tag)).ToArray();
+        string[] userTags = request.InvalidatesAllUserEntries ? [CacheKeys.UserTag(userId)] : [];
+        string[] tags = [.. request.CacheTagsToInvalidate.Select(tag => CacheKeys.Tag(userId, tag)), .. userTags];
         // The command is already committed, so a client disconnect must not skip invalidation; the timeout keeps a slow Redis from stalling the response.
         using var timeout = new CancellationTokenSource(InvalidationTimeout);
         try

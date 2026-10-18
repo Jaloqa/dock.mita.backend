@@ -2,6 +2,7 @@ using Mita.Api.Authentication;
 using Mita.Api.Extensions;
 using Mita.Api.Features.Auth;
 using Mita.Api.Features.System;
+using Mita.Api.Features.Users;
 using Mita.Api.Middleware;
 using Mita.Api.Testing;
 using Mita.Infrastructure;
@@ -39,6 +40,7 @@ app.MapMitaHealth();
 app.MapMitaOpenApi();
 app.MapSystemEndpoints();
 app.MapAuthEndpoints();
+app.MapUsersEndpoints();
 
 if (app.Environment.IsEnvironment("Testing"))
 {

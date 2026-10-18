@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Mita.Api.IntegrationTests.Infrastructure;
+using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
 using Serilog.Core;
 using Serilog.Events;
@@ -111,6 +112,30 @@ public sealed class LoginTests(MitaApiFactory factory) : IClassFixture<MitaApiFa
             .SingleAsync(row => row.NormalizedEmail == normalized, Ct);
         user.LockoutEnd.ShouldNotBeNull();
         user.LockoutEnd.Value.ShouldBeGreaterThan(DateTimeOffset.UtcNow.AddMinutes(14));
+    }
+
+    [Fact]
+    public async Task Should_EndLockoutFromInjectedClock_When_AccountLocks()
+    {
+        var clock = new TestTimeProvider();
+        clock.Advance(TimeSpan.FromDays(10));
+        await using var timed = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(
+            services => services.AddSingleton<TimeProvider>(clock)));
+        using var client = new AuthClient(timed);
+        var credentials = await client.RegisterNewAsync(Ct);
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            using var failed = await client.LoginAsync(credentials.Email, "wrong-password-123", Ct);
+            await AssertInvalidCredentialsAsync(failed);
+        }
+
+        var expectedEnd = clock.GetUtcNow() + IdentitySetup.LockoutDuration;
+        await using var scope = factory.Services.CreateAsyncScope();
+        var normalized = credentials.Email.ToUpperInvariant();
+        var user = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users.AsNoTracking()
+            .SingleAsync(row => row.NormalizedEmail == normalized, Ct);
+        user.LockoutEnd.ShouldNotBeNull().ShouldBeInRange(expectedEnd - TimeSpan.FromMinutes(1), expectedEnd);
     }
 
     [Fact]
