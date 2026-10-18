@@ -212,6 +212,28 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
     }
 
     [Fact]
+    public async Task Should_DeleteUserWithAccountsAndTransfers()
+    {
+        using var client = new AuthClient(factory);
+        var credentials = await client.RegisterNewAsync(Ct);
+        var userId = (await GetMeAsync(client)).GetProperty("id").GetGuid();
+        var from = await TestData.AddAccountAsync(factory, userId, openingBalance: 10_000);
+        var to = await TestData.AddAccountAsync(factory, userId);
+        await TestData.AddTransferAsync(factory, from, to, 2_500);
+
+        using (var response = await DeleteAsync(client, new { password = credentials.Password }))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await db.Accounts.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+        (await db.Transfers.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+        (await db.AccountMovements.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Should_DeleteAccount_When_PasswordCorrectAfterWrongAttempts()
     {
         using var client = new AuthClient(factory);
