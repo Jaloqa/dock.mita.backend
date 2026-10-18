@@ -4,7 +4,8 @@ using Mita.Infrastructure.Authentication;
 
 namespace Mita.Api.Features.Auth.Refresh;
 
-public sealed class RefreshHandler(ITokenService tokens) : IRequestHandler<RefreshCommand, Result<RefreshResponse>>
+public sealed class RefreshHandler(ITokenService tokens, SecurityStampCache stamps)
+    : IRequestHandler<RefreshCommand, Result<RefreshResponse>>
 {
     public async Task<Result<RefreshResponse>> Handle(RefreshCommand command, CancellationToken cancellationToken)
     {
@@ -14,6 +15,11 @@ public sealed class RefreshHandler(ITokenService tokens) : IRequestHandler<Refre
         }
 
         var outcome = await tokens.RefreshAsync(command.RefreshToken, cancellationToken);
+
+        if (outcome is RefreshOutcome.ReuseDetected reuse)
+        {
+            await stamps.InvalidateAsync(reuse.UserId);
+        }
 
         return outcome switch
         {

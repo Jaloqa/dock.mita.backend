@@ -131,6 +131,26 @@ public sealed class TokenServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Should_RotateSecurityAndConcurrencyStamps_When_RevokedTokenIsReused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext();
+        var service = NewService(db);
+        var first = await service.IssueAsync(user, null, ct);
+        await service.RefreshAsync(first.RefreshToken, ct);
+        var before = await NewContext().Users.AsNoTracking().SingleAsync(row => row.Id == user.Id, ct);
+        time.Advance(TokenService.RotationGracePeriod + TimeSpan.FromSeconds(1));
+
+        var reuse = await service.RefreshAsync(first.RefreshToken, ct);
+
+        reuse.ShouldBeOfType<RefreshOutcome.ReuseDetected>().UserId.ShouldBe(user.Id);
+        var after = await NewContext().Users.AsNoTracking().SingleAsync(row => row.Id == user.Id, ct);
+        after.SecurityStamp.ShouldNotBeNullOrWhiteSpace();
+        after.SecurityStamp.ShouldNotBe(before.SecurityStamp);
+        after.ConcurrencyStamp.ShouldNotBe(before.ConcurrencyStamp);
+    }
+
+    [Fact]
     public async Task Should_ReturnInvalid_When_TokenExpiredOrUnknown()
     {
         var ct = TestContext.Current.CancellationToken;

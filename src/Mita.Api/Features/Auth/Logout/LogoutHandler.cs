@@ -9,6 +9,7 @@ namespace Mita.Api.Features.Auth.Logout;
 public sealed partial class LogoutHandler(
     ITokenService tokens,
     UserManager<AppUser> userManager,
+    SecurityStampCache stamps,
     ILogger<LogoutHandler> logger)
     : IRequestHandler<LogoutCommand, Result>
 {
@@ -26,6 +27,7 @@ public sealed partial class LogoutHandler(
         if (userId is not null)
         {
             await BumpSecurityStampAsync(userId.Value);
+            await stamps.InvalidateAsync(userId.Value);
         }
 
         return Result.Success();
