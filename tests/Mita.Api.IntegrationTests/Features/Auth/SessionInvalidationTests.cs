@@ -148,6 +148,20 @@ public sealed class SessionInvalidationTests(MitaApiFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task Should_Return401SessionExpired_When_AccessTokenExpired()
+    {
+        var user = await TestTokens.CreateForNewUserAsync(factory);
+        var token = TestTokens.Create(
+            user.UserId,
+            expires: DateTimeOffset.UtcNow.AddMinutes(-5),
+            stamp: await StoredStampAsync(user.UserId));
+
+        using var response = await SendWithBearerAsync(factory, MePath, token);
+
+        await AssertSessionExpiredAsync(response);
+    }
+
+    [Fact]
     public async Task Should_Return401SessionExpired_When_StampClaimMissing()
     {
         var user = await TestTokens.CreateForNewUserAsync(factory);

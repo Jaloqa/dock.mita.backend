@@ -37,6 +37,42 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
     }
 
     [Fact]
+    public async Task Should_DescribeAuthUsersAndSettingsEndpoints()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = document.RootElement;
+        var paths = root.GetProperty("paths");
+        paths.TryGetProperty("/v1/auth/login", out var login).ShouldBeTrue();
+        paths.TryGetProperty("/v1/me", out var me).ShouldBeTrue();
+        paths.TryGetProperty("/v1/settings", out var settings).ShouldBeTrue();
+
+        var schemes = root.GetProperty("components").GetProperty("securitySchemes");
+        var cookie = schemes.GetProperty("cookie");
+        cookie.GetProperty("type").GetString().ShouldBe("apiKey");
+        cookie.GetProperty("in").GetString().ShouldBe("cookie");
+        cookie.GetProperty("name").GetString().ShouldBe("mita_at");
+        var bearer = schemes.GetProperty("bearer");
+        bearer.GetProperty("type").GetString().ShouldBe("http");
+        bearer.GetProperty("scheme").GetString().ShouldBe("bearer");
+
+        login.GetProperty("post").TryGetProperty("security", out _).ShouldBeFalse();
+        me.GetProperty("get").GetProperty("security").GetArrayLength().ShouldBe(2);
+        settings.GetProperty("put").GetProperty("security").GetArrayLength().ShouldBe(2);
+
+        TagOf(login.GetProperty("post")).ShouldBe("Auth");
+        TagOf(me.GetProperty("get")).ShouldBe("Users");
+        TagOf(settings.GetProperty("get")).ShouldBe("Settings");
+    }
+
+    private static string? TagOf(JsonElement operation) =>
+        operation.GetProperty("tags")[0].GetString();
+
+    [Fact]
     public async Task Should_NotServeScalar_OutsideDevelopment()
     {
         using var client = factory.CreateClient();
