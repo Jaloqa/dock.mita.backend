@@ -1,4 +1,5 @@
 using Mita.Api.Configuration;
+using Mita.Infrastructure.Rates;
 using Shouldly;
 
 namespace Mita.Api.UnitTests.Configuration;
@@ -20,6 +21,50 @@ public sealed class OptionsValidatorTests
         new RateLimitingOptionsValidator()
             .Validate(null, new RateLimitingOptions { SessionPermitLimit = limit })
             .Succeeded.ShouldBe(valid);
+
+    [Fact]
+    public void Should_AcceptDefaults_When_ValidatingRatesOptions()
+    {
+        var options = new RatesOptions();
+
+        new RatesOptionsValidator().Validate(null, options).Succeeded.ShouldBeTrue();
+        options.SyncEnabled.ShouldBeTrue();
+        options.SyncInterval.ShouldBe(TimeSpan.FromHours(6));
+        options.HistoryDays.ShouldBe(183);
+        options.NbpBaseUrl.ShouldBe(new Uri("https://api.nbp.pl/api/"));
+    }
+
+    [Theory]
+    [InlineData(30, false)]
+    [InlineData(60, true)]
+    public void Should_RequireAtLeastOneMinute_When_ValidatingRatesSyncInterval(int seconds, bool valid) =>
+        new RatesOptionsValidator()
+            .Validate(null, new RatesOptions { SyncInterval = TimeSpan.FromSeconds(seconds) })
+            .Succeeded.ShouldBe(valid);
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(3650, true)]
+    [InlineData(3651, false)]
+    public void Should_RequireHistoryDaysInRange_When_ValidatingRatesOptions(int days, bool valid) =>
+        new RatesOptionsValidator()
+            .Validate(null, new RatesOptions { HistoryDays = days })
+            .Succeeded.ShouldBe(valid);
+
+    [Theory]
+    [InlineData("https://api.nbp.pl/api/", true)]
+    [InlineData("http://api.nbp.pl/api/", false)]
+    public void Should_RequireHttpsUrl_When_ValidatingRatesNbpBaseUrl(string url, bool valid) =>
+        new RatesOptionsValidator()
+            .Validate(null, new RatesOptions { NbpBaseUrl = new Uri(url) })
+            .Succeeded.ShouldBe(valid);
+
+    [Fact]
+    public void Should_RejectRelativeUrl_When_ValidatingRatesNbpBaseUrl() =>
+        new RatesOptionsValidator()
+            .Validate(null, new RatesOptions { NbpBaseUrl = new Uri("/api/", UriKind.Relative) })
+            .Succeeded.ShouldBeFalse();
 
     [Fact]
     public void Should_AllowSixtySessionRequests_When_NotConfigured() =>
