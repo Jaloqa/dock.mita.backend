@@ -1,6 +1,7 @@
 using Mita.Api.Authentication;
 using Mita.Api.Extensions;
 using Mita.Api.Features.Auth;
+using Mita.Api.Features.Settings;
 using Mita.Api.Features.System;
 using Mita.Api.Features.Users;
 using Mita.Api.Middleware;
@@ -18,6 +19,7 @@ builder.Services.AddMitaAuth();
 builder.Services.AddMitaForwardedHeaders();
 builder.Services.AddMitaCors();
 builder.Services.AddMitaRateLimiting();
+builder.Services.AddMitaJson();
 builder.Services.AddMitaApiVersioning();
 builder.Services.AddMitaOpenApi();
 
@@ -41,6 +43,7 @@ app.MapMitaOpenApi();
 app.MapSystemEndpoints();
 app.MapAuthEndpoints();
 app.MapUsersEndpoints();
+app.MapSettingsEndpoints();
 
 if (app.Environment.IsEnvironment("Testing"))
 {
