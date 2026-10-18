@@ -2,3 +2,4 @@ services:
   api:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Database__ApplyMigrationsOnStartup: "true"

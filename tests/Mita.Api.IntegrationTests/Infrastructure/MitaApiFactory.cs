@@ -14,6 +14,7 @@ public sealed class MitaApiFactory(PostgresFixture postgres, RedisFixture redis)
             {
                 ["ConnectionStrings:Mita"] = postgres.ConnectionString,
                 ["ConnectionStrings:Redis"] = redis.ConnectionString,
+                ["Database:ApplyMigrationsOnStartup"] = "true",
                 ["Jwt:Issuer"] = TestTokens.Issuer,
                 ["Jwt:Audience"] = TestTokens.Audience,
                 ["Jwt:SigningKey"] = TestTokens.SigningKey
