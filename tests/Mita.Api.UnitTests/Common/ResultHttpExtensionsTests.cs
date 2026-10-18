@@ -29,6 +29,18 @@ public sealed class ResultHttpExtensionsTests
     }
 
     [Fact]
+    public async Task Should_ReturnEmptyErrors_When_ValidationErrorHasNoFields()
+    {
+        Result result = new Error(ErrorType.Validation, "validation.failed");
+
+        var (context, json) = await ExecuteAsync(result.ToHttp(() => Results.NoContent()));
+
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Validation failed");
+        json.RootElement.GetProperty("errors").EnumerateObject().ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Should_MapNotFoundTo404()
     {
         Result<string> result = Error.NotFound();

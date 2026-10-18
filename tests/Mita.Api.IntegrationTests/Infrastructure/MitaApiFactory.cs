@@ -10,6 +10,12 @@ public sealed class MitaApiFactory(PostgresFixture postgres) : WebApplicationFac
     {
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
-            new Dictionary<string, string?> { ["ConnectionStrings:Mita"] = postgres.ConnectionString }));
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Mita"] = postgres.ConnectionString,
+                ["Jwt:Issuer"] = TestTokens.Issuer,
+                ["Jwt:Audience"] = TestTokens.Audience,
+                ["Jwt:SigningKey"] = TestTokens.SigningKey
+            }));
     }
 }
