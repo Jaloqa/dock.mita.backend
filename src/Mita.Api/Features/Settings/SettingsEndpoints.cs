@@ -9,6 +9,7 @@ public static class SettingsEndpoints
     public static IEndpointRouteBuilder MapSettingsEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapV1()
+            .WithTags("Settings")
             .MapGetSettings()
             .MapUpdateSettings();
 

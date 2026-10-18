@@ -14,6 +14,7 @@ public static class AuthEndpoints
         app.MapV1()
             .MapGroup("/auth")
             .AllowAnonymous()
+            .WithTags("Auth")
             .WithMetadata(new SkipXsrfMetadata())
             .RequireRateLimiting(RateLimitingExtensions.AuthPolicy)
             .MapRegister()

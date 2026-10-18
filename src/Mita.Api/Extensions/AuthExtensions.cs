@@ -83,7 +83,7 @@ public static class AuthExtensions
             {
                 context.HandleResponse();
                 context.Response.Headers.WWWAuthenticate = JwtBearerDefaults.AuthenticationScheme;
-                if (context.AuthenticateFailure is SessionExpiredException)
+                if (context.AuthenticateFailure is SessionExpiredException or SecurityTokenExpiredException)
                 {
                     await new ErrorProblemResult(Error.Unauthorized(SecurityStampValidation.SessionExpiredCode))
                         .ExecuteAsync(context.HttpContext);
