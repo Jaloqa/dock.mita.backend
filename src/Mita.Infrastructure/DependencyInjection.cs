@@ -54,7 +54,13 @@ public static class DependencyInjection
     {
         services.AddOptions<RedisOptions>()
             .Configure<IConfiguration>((options, root) =>
-                options.ConnectionString = root.GetConnectionString(RedisOptions.ConnectionStringName) ?? string.Empty)
+            {
+                options.ConnectionString = root.GetConnectionString(RedisOptions.ConnectionStringName) ?? string.Empty;
+                if (root[$"{RedisOptions.ConnectionStringName}:InstanceName"] is { Length: > 0 } instanceName)
+                {
+                    options.InstanceName = instanceName;
+                }
+            })
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<RedisOptions>, RedisOptionsValidator>();
 
@@ -82,10 +88,14 @@ public static class DependencyInjection
             return ConnectionMultiplexer.Connect(redis);
         });
 
-        services.AddStackExchangeRedisCache(options => options.InstanceName = CacheDefaults.InstanceName);
+        services.AddStackExchangeRedisCache(_ => { });
         services.AddOptions<RedisCacheOptions>()
-            .Configure<IServiceProvider>((options, provider) => options.ConnectionMultiplexerFactory =
-                () => Task.FromResult(provider.GetRequiredService<IConnectionMultiplexer>()));
+            .Configure<IServiceProvider>((options, provider) =>
+            {
+                options.InstanceName = provider.GetRequiredService<IOptions<RedisOptions>>().Value.InstanceName;
+                options.ConnectionMultiplexerFactory =
+                    () => Task.FromResult(provider.GetRequiredService<IConnectionMultiplexer>());
+            });
 
         services.AddHybridCache(options => options.DefaultEntryOptions = new HybridCacheEntryOptions
         {

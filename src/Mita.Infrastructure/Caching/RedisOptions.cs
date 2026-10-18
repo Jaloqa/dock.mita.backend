@@ -7,6 +7,8 @@ public sealed class RedisOptions
     public const string ConnectionStringName = "Redis";
 
     public string ConnectionString { get; set; } = string.Empty;
+
+    public string InstanceName { get; set; } = CacheDefaults.InstanceName;
 }
 
 public sealed class RedisOptionsValidator : IValidateOptions<RedisOptions>
