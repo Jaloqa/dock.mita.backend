@@ -91,6 +91,20 @@ public sealed class ResultHttpExtensionsTests
     }
 
     [Fact]
+    public async Task Should_Return503WithCode_When_ErrorUnavailable()
+    {
+        Result<string> result = Error.Unavailable("rates.unavailable");
+
+        var (context, json) = await ExecuteAsync(result.ToHttp(value => Results.Ok(value)));
+
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status503ServiceUnavailable);
+        context.Response.ContentType.ShouldStartWith("application/problem+json");
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Service Unavailable");
+        json.RootElement.GetProperty("code").GetString().ShouldBe("rates.unavailable");
+        json.RootElement.GetProperty("correlationId").GetString().ShouldBe("corr-1");
+    }
+
+    [Fact]
     public async Task Should_UseSuccessResult_When_ResultSucceeded()
     {
         Result<string> result = "hello";

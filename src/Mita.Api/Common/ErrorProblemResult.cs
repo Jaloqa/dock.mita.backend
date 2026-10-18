@@ -36,6 +36,14 @@ internal sealed class ErrorProblemResult(Error error) : IResult
                 var forbidden = new ProblemDetails { Status = StatusCodes.Status403Forbidden, Title = "Forbidden" };
                 forbidden.Extensions["code"] = error.Code;
                 return forbidden;
+            case ErrorType.Unavailable:
+                var unavailable = new ProblemDetails
+                {
+                    Status = StatusCodes.Status503ServiceUnavailable,
+                    Title = "Service Unavailable"
+                };
+                unavailable.Extensions["code"] = error.Code;
+                return unavailable;
             default:
                 throw new ArgumentOutOfRangeException(nameof(error), error.Type, "Unknown error type.");
         }
