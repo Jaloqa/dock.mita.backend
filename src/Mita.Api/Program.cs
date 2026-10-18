@@ -1,5 +1,6 @@
 using Mita.Api.Extensions;
 using Mita.Api.Middleware;
+using Mita.Infrastructure;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddMitaLogging();
 builder.Services.AddMitaErrorHandling();
 builder.Services.AddMitaHealth();
+builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddMitaMediator();
 builder.Services.AddMitaApiVersioning();
 builder.Services.AddMitaOpenApi();
