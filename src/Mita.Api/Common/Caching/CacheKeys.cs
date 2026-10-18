@@ -7,4 +7,6 @@ public static class CacheKeys
     public static string Tag(Guid userId, string tag) => $"u:{userId}:{tag}";
 
     public static string UserTag(Guid userId) => $"user:{userId}";
+
+    public static string Global(string value) => $"g:{value}";
 }

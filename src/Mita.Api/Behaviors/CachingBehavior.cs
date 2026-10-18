@@ -20,9 +20,20 @@ public sealed partial class CachingBehavior<TRequest, TResponse>(
         RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
-        var userId = currentUser.Id;
-        var key = CacheKeys.Key(userId, request.CacheKey);
-        string[] tags = [CacheKeys.UserTag(userId), .. request.CacheTags.Select(tag => CacheKeys.Tag(userId, tag))];
+        string key;
+        string[] tags;
+        if (request.IsUserScoped)
+        {
+            var userId = currentUser.Id;
+            key = CacheKeys.Key(userId, request.CacheKey);
+            tags = [CacheKeys.UserTag(userId), .. request.CacheTags.Select(tag => CacheKeys.Tag(userId, tag))];
+        }
+        else
+        {
+            key = CacheKeys.Global(request.CacheKey);
+            tags = [.. request.CacheTags.Select(CacheKeys.Global)];
+        }
+
         var invocation = new Invocation(next);
 
         try

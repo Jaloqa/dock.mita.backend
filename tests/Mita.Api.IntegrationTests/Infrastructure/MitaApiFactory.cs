@@ -10,6 +10,13 @@ public sealed class MitaApiFactory(PostgresFixture postgres, RedisFixture redis)
         WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(
             (_, configuration) => configuration.AddInMemoryCollection(settings)));
 
+    public WebApplicationFactory<Program> WithIsolatedData() =>
+        WithSettings(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:Mita"] = postgres.NewDatabaseConnectionString(),
+            ["Redis:InstanceName"] = $"mita-{Guid.NewGuid():N}:"
+        });
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -19,6 +26,7 @@ public sealed class MitaApiFactory(PostgresFixture postgres, RedisFixture redis)
                 ["ConnectionStrings:Mita"] = postgres.ConnectionString,
                 ["ConnectionStrings:Redis"] = redis.ConnectionString,
                 ["Database:ApplyMigrationsOnStartup"] = "true",
+                ["Rates:SyncEnabled"] = "false",
                 ["Jwt:Issuer"] = TestTokens.Issuer,
                 ["Jwt:Audience"] = TestTokens.Audience,
                 ["Jwt:SigningKey"] = TestTokens.SigningKey,
