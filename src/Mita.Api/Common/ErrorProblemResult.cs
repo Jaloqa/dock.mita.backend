@@ -9,8 +9,7 @@ internal sealed class ErrorProblemResult(Error error) : IResult
         var problem = CreateProblem();
         httpContext.Response.StatusCode = problem.Status!.Value;
 
-        await httpContext.RequestServices.GetRequiredService<IProblemDetailsService>().WriteAsync(
-            new ProblemDetailsContext { HttpContext = httpContext, ProblemDetails = problem });
+        await ProblemDetailsWriter.WriteAsync(httpContext, problem);
     }
 
     private ProblemDetails CreateProblem()
@@ -18,7 +17,7 @@ internal sealed class ErrorProblemResult(Error error) : IResult
         switch (error.Type)
         {
             case ErrorType.Validation:
-                return new ValidationProblemDetails(error.Fields!.ToDictionary(f => f.Key, f => f.Value))
+                return new ValidationProblemDetails(error.Fields?.ToDictionary(f => f.Key, f => f.Value) ?? [])
                 {
                     Status = StatusCodes.Status400BadRequest,
                     Title = "Validation failed"
