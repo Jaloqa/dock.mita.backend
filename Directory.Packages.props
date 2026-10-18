@@ -7,6 +7,11 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup>
+    <PackageVersion Include="Asp.Versioning.Http" Version="10.2.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.18.0" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup>
