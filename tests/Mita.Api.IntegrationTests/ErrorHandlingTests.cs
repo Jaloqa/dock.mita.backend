@@ -8,6 +8,22 @@ namespace Mita.Api.IntegrationTests;
 public sealed class ErrorHandlingTests(MitaApiFactory factory) : IClassFixture<MitaApiFactory>
 {
     [Fact]
+    public async Task Should_ReturnProblemJson_When_AcceptExcludesJson()
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
+
+        using var response = await client.GetAsync("/test/throw", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        using var json = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Server error");
+        json.RootElement.GetProperty("correlationId").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
     public async Task Should_ReturnProblemDetails_When_HandlerThrows()
     {
         using var client = factory.CreateClient();

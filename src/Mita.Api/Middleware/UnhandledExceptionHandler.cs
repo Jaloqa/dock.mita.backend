@@ -1,11 +1,10 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Mita.Api.Common;
 
 namespace Mita.Api.Middleware;
 
-public sealed partial class UnhandledExceptionHandler(
-    IProblemDetailsService problemDetailsService,
-    ILogger<UnhandledExceptionHandler> logger) : IExceptionHandler
+public sealed partial class UnhandledExceptionHandler(ILogger<UnhandledExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -16,15 +15,10 @@ public sealed partial class UnhandledExceptionHandler(
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
 
-        return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
-        {
-            HttpContext = httpContext,
-            ProblemDetails = new ProblemDetails
-            {
-                Status = StatusCodes.Status500InternalServerError,
-                Title = "Server error"
-            }
-        });
+        await ProblemDetailsWriter.WriteAsync(
+            httpContext,
+            new ProblemDetails { Status = StatusCodes.Status500InternalServerError, Title = "Server error" });
+        return true;
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception")]
