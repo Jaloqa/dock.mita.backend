@@ -6,7 +6,7 @@ namespace Mita.Api.UnitTests.Features.Accounts;
 
 public sealed class CreateAccountValidatorTests
 {
-    private const string Valid =
+    internal const string Valid =
         """{"name":"Main","type":"card","currency":"PLN","openingBalance":1000,"cardLast4":"1234","archived":false}""";
 
     public static TheoryData<string, string, string> InvalidFields => new()
@@ -79,16 +79,16 @@ public sealed class CreateAccountValidatorTests
             ["Name", "Type", "Currency", "OpeningBalance"],
             ignoreOrder: true);
 
-    private static string Pascal(string field) => char.ToUpperInvariant(field[0]) + field[1..];
+    internal static string Pascal(string field) => char.ToUpperInvariant(field[0]) + field[1..];
 
-    private static string With(string field, string json)
+    internal static string With(string field, string json)
     {
         var body = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(Valid)!;
         body[field] = JsonDocument.Parse(json).RootElement.Clone();
         return JsonSerializer.Serialize(body);
     }
 
-    private static string Without(string field)
+    internal static string Without(string field)
     {
         var body = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(Valid)!;
         body.Remove(field);
