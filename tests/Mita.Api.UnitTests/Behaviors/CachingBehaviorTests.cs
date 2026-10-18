@@ -95,6 +95,32 @@ public sealed class CachingBehaviorTests : IDisposable
     }
 
     [Fact]
+    public async Task Should_CallHandlerAgain_When_AllUserEntriesInvalidated()
+    {
+        handler.SetupSequence(h => h.Handle()).Returns("old").Returns("other user").Returns("new");
+        var userId = Guid.NewGuid();
+        var behavior = CreateBehavior(userId);
+        var otherUser = CreateBehavior(Guid.NewGuid());
+        var invalidation = new CacheInvalidationBehavior<ForgetUserCommand, Result>(
+            Cache,
+            CurrentUser(userId),
+            NullLogger<CacheInvalidationBehavior<ForgetUserCommand, Result>>.Instance);
+
+        var before = await behavior.Handle(new SampleQuery("a"), Next, TestContext.Current.CancellationToken);
+        await otherUser.Handle(new SampleQuery("a"), Next, TestContext.Current.CancellationToken);
+        await invalidation.Handle(
+            new ForgetUserCommand(),
+            _ => Task.FromResult(Result.Success()),
+            TestContext.Current.CancellationToken);
+        var after = await behavior.Handle(new SampleQuery("a"), Next, TestContext.Current.CancellationToken);
+        var otherAfter = await otherUser.Handle(new SampleQuery("a"), Next, TestContext.Current.CancellationToken);
+
+        before.Value.ShouldBe("old");
+        after.Value.ShouldBe("new");
+        otherAfter.Value.ShouldBe("other user");
+    }
+
+    [Fact]
     public async Task Should_CallHandler_When_CacheThrows()
     {
         handler.Setup(h => h.Handle()).Returns("value");
@@ -301,5 +327,12 @@ public sealed class CachingBehaviorTests : IDisposable
     public sealed record SampleCommand : IRequest<Result>, IInvalidatesCache
     {
         public IReadOnlyCollection<string> CacheTagsToInvalidate => ["sample"];
+    }
+
+    public sealed record ForgetUserCommand : IRequest<Result>, IInvalidatesCache
+    {
+        public IReadOnlyCollection<string> CacheTagsToInvalidate => [];
+
+        public bool InvalidatesAllUserEntries => true;
     }
 }

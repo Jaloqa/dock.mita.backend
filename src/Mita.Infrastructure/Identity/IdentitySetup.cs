@@ -27,6 +27,8 @@ public static class IdentitySetup
             })
             .AddEntityFrameworkStores<AppDbContext>();
 
+        services.AddScoped<LockoutCounter>();
+
         return services;
     }
 }
