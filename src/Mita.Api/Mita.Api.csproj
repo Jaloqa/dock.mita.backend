@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Elastic.CommonSchema.Serilog" />
+    <PackageReference Include="Elastic.Apm.NetCoreAll" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Mita.Infrastructure\Mita.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
