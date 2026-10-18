@@ -158,13 +158,13 @@ public sealed class TokenServiceTests(PostgresFixture postgres) : IAsyncLifetime
         }));
 
         var winner = outcomes.OfType<RefreshOutcome.Rotated>().ShouldHaveSingleItem();
-        outcomes.Count(outcome => outcome is RefreshOutcome.Invalid).ShouldBe(7);
+        outcomes.Count(outcome => outcome is RefreshOutcome.Superseded).ShouldBe(7);
         await using var db = NewContext();
         (await NewService(db).RefreshAsync(winner.Tokens.RefreshToken, ct)).ShouldBeOfType<RefreshOutcome.Rotated>();
     }
 
     [Fact]
-    public async Task Should_ReturnInvalidAndKeepNewerToken_When_RotatedTokenReplayedWithinGrace()
+    public async Task Should_ReturnSupersededAndKeepNewerToken_When_RotatedTokenReplayedWithinGrace()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var db = NewContext();
@@ -173,7 +173,7 @@ public sealed class TokenServiceTests(PostgresFixture postgres) : IAsyncLifetime
         var rotated = (RefreshOutcome.Rotated)await service.RefreshAsync(first.RefreshToken, ct);
         time.Advance(TokenService.RotationGracePeriod - TimeSpan.FromSeconds(1));
 
-        (await service.RefreshAsync(first.RefreshToken, ct)).ShouldBeOfType<RefreshOutcome.Invalid>();
+        (await service.RefreshAsync(first.RefreshToken, ct)).ShouldBeOfType<RefreshOutcome.Superseded>();
 
         (await service.RefreshAsync(rotated.Tokens.RefreshToken, ct)).ShouldBeOfType<RefreshOutcome.Rotated>();
     }

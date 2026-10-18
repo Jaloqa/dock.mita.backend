@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bogus;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -13,6 +14,8 @@ public sealed class AuthClient : IDisposable
 {
     public const string RegisterPath = "/v1/auth/register";
     public const string LoginPath = "/v1/auth/login";
+    public const string RefreshPath = "/v1/auth/refresh";
+    public const string LogoutPath = "/v1/auth/logout";
     public const string XsrfCookie = "XSRF-TOKEN";
     public const string XsrfHeader = "X-XSRF-TOKEN";
 
@@ -74,6 +77,23 @@ public sealed class AuthClient : IDisposable
         SendAndDisposeAsync(
             new HttpRequestMessage(HttpMethod.Post, LoginPath) { Content = JsonContent.Create(new { email, password }) },
             ct);
+
+    public Task<HttpResponseMessage> RefreshAsync(CancellationToken ct = default) =>
+        SendAndDisposeAsync(new HttpRequestMessage(HttpMethod.Post, RefreshPath), ct);
+
+    public Task<HttpResponseMessage> LogoutAsync(string? bearerToken = null, CancellationToken ct = default)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, LogoutPath);
+        if (bearerToken is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+        }
+
+        return SendAndDisposeAsync(request, ct);
+    }
+
+    public void SetRefreshCookie(string value) =>
+        Cookies.Add(BaseAddress, new Cookie("mita_rt", value, "/v1/auth") { Secure = true, HttpOnly = true });
 
     public HttpRequestMessage WithXsrf(HttpRequestMessage request)
     {
