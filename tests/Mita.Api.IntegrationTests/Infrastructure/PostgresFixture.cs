@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Mita.Infrastructure.Persistence;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -14,7 +16,14 @@ public sealed class PostgresFixture : IAsyncLifetime
     public string NewDatabaseConnectionString() =>
         new NpgsqlConnectionStringBuilder(ConnectionString) { Database = $"t_{Guid.NewGuid():N}" }.ConnectionString;
 
-    public async ValueTask InitializeAsync() => await container.StartAsync();
+    public async ValueTask InitializeAsync()
+    {
+        await container.StartAsync();
+
+        await using var context = new AppDbContext(
+            new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).Options);
+        await context.Database.MigrateAsync();
+    }
 
     public async ValueTask DisposeAsync() => await container.DisposeAsync();
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Mita.Api.Common.Json;
+using Mita.Domain.Money;
 using Mita.Domain.Users;
 
 namespace Mita.Api.Common.Settings;

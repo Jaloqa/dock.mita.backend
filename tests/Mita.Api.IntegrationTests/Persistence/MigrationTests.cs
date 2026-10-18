@@ -29,7 +29,8 @@ public sealed class MigrationTests(PostgresFixture postgres)
         await using var command = new NpgsqlCommand(
             """
             SELECT table_name FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_name IN ('AspNetUsers', 'user_settings', 'refresh_tokens')
+            WHERE table_schema = 'public' AND table_name IN ('AspNetUsers', 'user_settings', 'refresh_tokens',
+                'accounts', 'transfers', 'exchange_rates', 'account_movements')
             """,
             connection);
         var tables = new List<string>();
@@ -39,7 +40,12 @@ public sealed class MigrationTests(PostgresFixture postgres)
             tables.Add(reader.GetString(0));
         }
 
-        tables.ShouldBe(["AspNetUsers", "refresh_tokens", "user_settings"], ignoreOrder: true);
+        tables.ShouldBe(
+            [
+                "AspNetUsers", "refresh_tokens", "user_settings", "accounts", "transfers", "exchange_rates",
+                "account_movements"
+            ],
+            ignoreOrder: true);
     }
 
     [Fact]
