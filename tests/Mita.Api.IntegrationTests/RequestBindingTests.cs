@@ -43,6 +43,36 @@ public sealed class RequestBindingTests(MitaApiFactory factory) : IClassFixture<
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
+    [Theory]
+    [InlineData("page", "x")]
+    [InlineData("pageSize", "x")]
+    public async Task Should_ReportParameterName_When_QueryParameterCannotBeBound(string name, string value)
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync($"/test/page?{name}={value}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        using var json = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        json.RootElement.GetProperty("title").GetString().ShouldBe("Validation failed");
+        var errors = json.RootElement.GetProperty("errors");
+        errors.EnumerateObject().Select(p => p.Name).ShouldBe([name]);
+        errors.GetProperty(name)[0].GetString().ShouldBe("validation.invalidValue");
+    }
+
+    [Fact]
+    public async Task Should_ReturnDefaults_When_QueryIsEmpty()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/test/page", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .ShouldBe("{\"items\":[],\"page\":1,\"pageSize\":20,\"total\":0}");
+    }
+
     private static async Task AssertInvalidBodyAsync(HttpResponseMessage response)
     {
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
