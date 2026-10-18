@@ -40,6 +40,10 @@ Configuration comes from `appsettings.json`, environment variables and user secr
 | `Cors:AllowedOrigins` | allowed frontend origins, for example `Cors__AllowedOrigins__0=http://localhost:3000`. Origins have no trailing slash or path | empty, which allows no cross-origin calls |
 | `RateLimiting:AuthPermitLimit` | requests per minute and client IP for register, login and `DELETE /v1/me` | `10` |
 | `RateLimiting:SessionPermitLimit` | requests per minute and client IP for `/v1/auth/refresh` and `/v1/auth/logout`, counted separately from the limit above. A 429 on refresh means "wait for `Retry-After` and retry", not "logged out" | `60` |
+| `Rates:SyncEnabled` | load exchange rates from NBP in the background. Set `Rates__SyncEnabled=false` for offline work: no request leaves the app, and cross-currency transfers then need a manual `rate` | `true` |
+| `Rates:SyncInterval` | time between syncs, at least one minute | `06:00:00` |
+| `Rates:HistoryDays` | days of history loaded on the first sync, 1 to 3650 | `183` |
+| `Rates:NbpBaseUrl` | NBP API base URL, absolute https | `https://api.nbp.pl/api/` |
 | `ForwardedHeaders:KnownProxies` | IP addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` are trusted | empty, which keeps the ASP.NET Core loopback-only default |
 | `ForwardedHeaders:KnownNetworks` | CIDR networks of trusted reverse proxies | empty, as above |
 

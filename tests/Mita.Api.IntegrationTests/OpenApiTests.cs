@@ -69,6 +69,30 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(settings.GetProperty("get")).ShouldBe("Settings");
     }
 
+    [Fact]
+    public async Task Should_DescribeAccountsTransfersAndRates()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/accounts", out var accounts).ShouldBeTrue();
+        paths.TryGetProperty("/v1/accounts/{id}", out var account).ShouldBeTrue();
+        paths.TryGetProperty("/v1/transfers", out var transfers).ShouldBeTrue();
+        paths.TryGetProperty("/v1/rates", out var rates).ShouldBeTrue();
+
+        TagOf(accounts.GetProperty("get")).ShouldBe("Accounts");
+        TagOf(accounts.GetProperty("post")).ShouldBe("Accounts");
+        TagOf(account.GetProperty("put")).ShouldBe("Accounts");
+        TagOf(account.GetProperty("delete")).ShouldBe("Accounts");
+        TagOf(transfers.GetProperty("get")).ShouldBe("Transfers");
+        TagOf(transfers.GetProperty("post")).ShouldBe("Transfers");
+        TagOf(rates.GetProperty("get")).ShouldBe("Rates");
+    }
+
     private static string? TagOf(JsonElement operation) =>
         operation.GetProperty("tags")[0].GetString();
 
