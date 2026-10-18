@@ -1,3 +1,4 @@
+using Mita.Api.Authentication;
 using Mita.Api.Extensions;
 using Mita.Api.Features.Auth.Login;
 using Mita.Api.Features.Auth.Logout;
@@ -13,6 +14,7 @@ public static class AuthEndpoints
         app.MapV1()
             .MapGroup("/auth")
             .AllowAnonymous()
+            .WithMetadata(new SkipXsrfMetadata())
             .RequireRateLimiting(RateLimitingExtensions.AuthPolicy)
             .MapRegister()
             .MapLogin()
