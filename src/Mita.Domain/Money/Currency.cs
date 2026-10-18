@@ -1,4 +1,4 @@
-namespace Mita.Domain.Users;
+namespace Mita.Domain.Money;
 
 public enum Currency
 {
