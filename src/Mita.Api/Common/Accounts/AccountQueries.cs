@@ -35,5 +35,5 @@ public static class AccountQueries
                 account.CardLast4,
                 account.Archived,
                 db.AccountMovements.Any(movement => movement.AccountId == account.Id),
-                0));
+                db.Goals.Count(goal => goal.AccountId == account.Id)));
 }
