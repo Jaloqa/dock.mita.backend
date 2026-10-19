@@ -93,6 +93,32 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(rates.GetProperty("get")).ShouldBe("Rates");
     }
 
+    [Fact]
+    public async Task Should_DescribeCategoriesAndTransactions()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/categories", out var categories).ShouldBeTrue();
+        paths.TryGetProperty("/v1/categories/{id}", out var category).ShouldBeTrue();
+        paths.TryGetProperty("/v1/transactions", out var transactions).ShouldBeTrue();
+        paths.TryGetProperty("/v1/transactions/{id}", out var transaction).ShouldBeTrue();
+
+        TagOf(categories.GetProperty("get")).ShouldBe("Categories");
+        TagOf(categories.GetProperty("post")).ShouldBe("Categories");
+        TagOf(category.GetProperty("put")).ShouldBe("Categories");
+        TagOf(category.GetProperty("delete")).ShouldBe("Categories");
+        TagOf(transactions.GetProperty("get")).ShouldBe("Transactions");
+        TagOf(transactions.GetProperty("post")).ShouldBe("Transactions");
+        TagOf(transaction.GetProperty("get")).ShouldBe("Transactions");
+        TagOf(transaction.GetProperty("put")).ShouldBe("Transactions");
+        TagOf(transaction.GetProperty("delete")).ShouldBe("Transactions");
+    }
+
     private static string? TagOf(JsonElement operation) =>
         operation.GetProperty("tags")[0].GetString();
 
