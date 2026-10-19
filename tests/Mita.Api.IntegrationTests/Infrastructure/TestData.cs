@@ -3,8 +3,11 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Mita.Domain.Accounts;
+using Mita.Domain.Budgets;
 using Mita.Domain.Categories;
+using Mita.Domain.Goals;
 using Mita.Domain.Money;
+using Mita.Domain.Periods;
 using Mita.Domain.Transactions;
 using Mita.Infrastructure.Persistence;
 
@@ -17,12 +20,13 @@ public static class TestData
         Guid userId,
         Currency currency = Currency.PLN,
         long openingBalance = 0,
-        bool archived = false)
+        bool archived = false,
+        AccountType type = AccountType.Card)
     {
         var account = Account.Create(
             userId,
             $"Account {Guid.NewGuid():N}"[..20],
-            AccountType.Card,
+            type,
             currency,
             openingBalance,
             null,
@@ -98,6 +102,73 @@ public static class TestData
         return transaction;
     }
 
+    public static async Task<Budget> AddBudgetAsync(
+        WebApplicationFactory<Program> factory,
+        Guid userId,
+        Guid categoryId,
+        string period,
+        long limit,
+        Currency currency = Currency.PLN)
+    {
+        var budget = Budget.Create(userId, categoryId, ParsePeriod(period), limit, currency);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Budgets.Add(budget);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return budget;
+    }
+
+    public static async Task<Goal> AddGoalAsync(
+        WebApplicationFactory<Program> factory,
+        Guid userId,
+        string name,
+        long target,
+        long saved = 0,
+        Currency currency = Currency.PLN,
+        string? deadline = null,
+        Guid? accountId = null)
+    {
+        var goal = Goal.Create(
+            userId,
+            name,
+            target,
+            deadline is null ? null : ParsePeriod(deadline),
+            accountId,
+            currency);
+        goal.AddSaved(saved);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Goals.Add(goal);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return goal;
+    }
+
+    public static async Task AddContributionAsync(
+        WebApplicationFactory<Program> factory,
+        Goal goal,
+        string date,
+        long baseAmount,
+        Currency baseCurrency = Currency.PLN)
+    {
+        var contribution = GoalContribution.Create(
+            goal.UserId,
+            goal.Id,
+            DateOnly.ParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture),
+            baseAmount,
+            baseCurrency,
+            null,
+            null,
+            baseAmount,
+            baseCurrency);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.GoalContributions.Add(contribution);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
     public static async Task AddRatesAsync(
         WebApplicationFactory<Program> factory,
         params (Currency Currency, string Date, decimal PlnValue)[] rows)
@@ -124,4 +195,7 @@ public static class TestData
 
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
+
+    private static PeriodKey ParsePeriod(string period) =>
+        PeriodKey.TryParse(period, out var key) ? key : throw new ArgumentException("Invalid period.", nameof(period));
 }

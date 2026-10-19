@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Mita.Domain.Accounts;
+using Mita.Domain.Budgets;
 using Mita.Domain.Categories;
+using Mita.Domain.Goals;
 using Mita.Domain.Money;
 using Mita.Domain.Transactions;
 using Mita.Domain.Users;
@@ -28,6 +30,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     public DbSet<Category> Categories => Set<Category>();
 
     public DbSet<Transaction> Transactions => Set<Transaction>();
+
+    public DbSet<Budget> Budgets => Set<Budget>();
+
+    public DbSet<Goal> Goals => Set<Goal>();
+
+    public DbSet<GoalContribution> GoalContributions => Set<GoalContribution>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
