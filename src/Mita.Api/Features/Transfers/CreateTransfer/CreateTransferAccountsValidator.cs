@@ -2,6 +2,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.EntityFrameworkCore;
 using Mita.Api.Authentication;
+using Mita.Api.Common.Wire;
 using Mita.Infrastructure.Persistence;
 
 namespace Mita.Api.Features.Transfers.CreateTransfer;
@@ -12,8 +13,8 @@ public sealed class CreateTransferAccountsValidator : AbstractValidator<CreateTr
     {
         RuleFor(command => command).CustomAsync(async (command, context, cancellationToken) =>
         {
-            Guid? fromId = CreateTransferFields.TryGetAccountId(command.FromAccountId, out var from) ? from : null;
-            Guid? toId = CreateTransferFields.TryGetAccountId(command.ToAccountId, out var to) ? to : null;
+            Guid? fromId = JsonValues.TryGetGuid(command.FromAccountId, out var from) ? from : null;
+            Guid? toId = JsonValues.TryGetGuid(command.ToAccountId, out var to) ? to : null;
             Guid[] ids = [.. new[] { fromId, toId }.OfType<Guid>().Distinct()];
             if (ids.Length == 0)
             {
