@@ -29,6 +29,18 @@ public readonly record struct FinancialPeriod(PeriodKey Key, DateOnly From, Date
     public static FinancialPeriod Shift(PeriodKey key, int months, MonthStart start) =>
         ByKey(key.AddMonths(months), start);
 
+    public static IReadOnlyList<FinancialPeriod> Last(DateOnly today, MonthStart start, int count)
+    {
+        var current = For(today, start).Key;
+        var periods = new FinancialPeriod[count];
+        for (var index = 0; index < count; index++)
+        {
+            periods[index] = Shift(current, index - count + 1, start);
+        }
+
+        return periods;
+    }
+
     public int DaysLeft(DateOnly today)
     {
         if (today > To)
