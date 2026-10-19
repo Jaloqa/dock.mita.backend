@@ -16,10 +16,7 @@ public static class BudgetWriteLocks
         Guid categoryId,
         CancellationToken ct)
     {
-        await db.Database
-            .SqlQuery<string>($"""SELECT "BaseCurrency" AS "Value" FROM user_settings WHERE "UserId" = {userId} FOR SHARE""")
-            .ToListAsync(ct);
-        var (baseCurrency, monthStart) = await db.SettingsAsync(userId, ct);
+        var (baseCurrency, monthStart) = await db.LockSettingsAsync(userId, ct);
 
         var categories = await db.Categories
             .FromSql($"""SELECT * FROM categories WHERE "Id" = {categoryId} AND "UserId" = {userId} FOR SHARE""")
