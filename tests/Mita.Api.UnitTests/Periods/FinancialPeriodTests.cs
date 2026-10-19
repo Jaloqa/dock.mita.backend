@@ -94,6 +94,50 @@ public sealed class FinancialPeriodTests
         }
     }
 
+    [Fact]
+    public void Should_ListLastPeriods_OldestFirst()
+    {
+        var periods = FinancialPeriod.Last(new DateOnly(2026, 10, 16), MonthStart.Day(1), 3);
+
+        periods.Select(period => (period.Key.ToString(), period.From, period.To)).ShouldBe(
+        [
+            ("2026-08", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31)),
+            ("2026-09", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30)),
+            ("2026-10", new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)),
+        ]);
+    }
+
+    [Fact]
+    public void Should_ListLastPeriods_FollowingMonthStart()
+    {
+        var periods = FinancialPeriod.Last(new DateOnly(2026, 10, 16), MonthStart.Day(10), 3);
+
+        periods.Select(period => (period.From, period.To)).ShouldBe(
+        [
+            (new DateOnly(2026, 8, 10), new DateOnly(2026, 9, 9)),
+            (new DateOnly(2026, 9, 10), new DateOnly(2026, 10, 9)),
+            (new DateOnly(2026, 10, 10), new DateOnly(2026, 11, 9)),
+        ]);
+    }
+
+    [Fact]
+    public void Should_EndLastPeriodsWithPreviousKey_When_TodayIsBeforeStartDay()
+    {
+        var periods = FinancialPeriod.Last(new DateOnly(2026, 10, 5), MonthStart.Day(10), 3);
+
+        periods.Select(period => period.Key.ToString()).ShouldBe(["2026-07", "2026-08", "2026-09"]);
+    }
+
+    [Fact]
+    public void Should_ListTwelveLastPeriods_AcrossYears()
+    {
+        var periods = FinancialPeriod.Last(new DateOnly(2026, 2, 10), MonthStart.Day(1), 12);
+
+        periods.Count.ShouldBe(12);
+        periods[0].Key.ToString().ShouldBe("2025-03");
+        periods[11].Key.ToString().ShouldBe("2026-02");
+    }
+
     [Theory]
     [InlineData(2026, 10, 14, 18)]
     [InlineData(2026, 10, 31, 1)]
