@@ -35,7 +35,8 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
             """
             SELECT table_name FROM information_schema.tables
             WHERE table_schema = 'public' AND table_name IN ('AspNetUsers', 'user_settings', 'refresh_tokens',
-                'accounts', 'transfers', 'exchange_rates', 'account_movements', 'categories', 'transactions')
+                'accounts', 'transfers', 'exchange_rates', 'account_movements', 'categories', 'transactions',
+                'budgets', 'goals', 'goal_contributions')
             """,
             connection);
         var tables = new List<string>();
@@ -50,7 +51,7 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
         tables.ShouldBe(
             [
                 "AspNetUsers", "refresh_tokens", "user_settings", "accounts", "transfers", "exchange_rates",
-                "account_movements", "categories", "transactions"
+                "account_movements", "categories", "transactions", "budgets", "goals", "goal_contributions"
             ],
             ignoreOrder: true);
 
