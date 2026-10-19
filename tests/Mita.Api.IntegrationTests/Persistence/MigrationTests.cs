@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -10,7 +11,7 @@ using Shouldly;
 
 namespace Mita.Api.IntegrationTests.Persistence;
 
-public sealed class MigrationTests(PostgresFixture postgres)
+public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory factory) : IClassFixture<MitaApiFactory>
 {
     private const string InsertUser =
         """
@@ -111,6 +112,55 @@ public sealed class MigrationTests(PostgresFixture postgres)
         var duplicate = await Should.ThrowAsync<PostgresException>(() => Insert(connection, ct));
 
         duplicate.SqlState.ShouldBe(PostgresErrorCodes.UniqueViolation);
+    }
+
+    [Fact]
+    public async Task Should_MigrateOnce_When_TwoHostsStartTogether()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var connectionString = postgres.NewDatabaseConnectionString();
+            var settings = new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Mita"] = connectionString,
+                ["Redis:InstanceName"] = $"mita-{Guid.NewGuid():N}:",
+                ["Database:ApplyMigrationsOnStartup"] = "true"
+            };
+            await using var first = factory.WithSettings(settings);
+            await using var second = factory.WithSettings(settings);
+
+            var clients = await Task.WhenAll(
+                Task.Run(first.CreateClient, ct),
+                Task.Run(second.CreateClient, ct));
+
+            foreach (var client in clients)
+            {
+                using var response = await client.GetAsync("/health/ready", ct);
+                response.StatusCode.ShouldBe(HttpStatusCode.OK);
+            }
+
+            await using var context = NewContext(connectionString);
+            var applied = await context.Database.GetAppliedMigrationsAsync(ct);
+            var recorded = new List<string>();
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync(ct);
+            await using var command = new NpgsqlCommand(
+                """SELECT "MigrationId" FROM "__EFMigrationsHistory" """,
+                connection);
+            await using (var reader = await command.ExecuteReaderAsync(ct))
+            {
+                while (await reader.ReadAsync(ct))
+                {
+                    recorded.Add(reader.GetString(0));
+                }
+            }
+
+            recorded.ShouldBe(applied, ignoreOrder: true);
+            recorded.ShouldBe(recorded.Distinct());
+            recorded.Count.ShouldBe(context.Database.GetMigrations().Count());
+        }
     }
 
     private static AppDbContext NewContext(string connectionString) =>
