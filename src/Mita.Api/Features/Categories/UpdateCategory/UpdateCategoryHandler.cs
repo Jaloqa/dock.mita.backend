@@ -31,7 +31,7 @@ public sealed class UpdateCategoryHandler(AppDbContext db, ICurrentUser currentU
 
         if (category.Kind != input.Kind
             && (category.System is not null
-                || await db.Transactions.AnyAsync(candidate => candidate.CategoryId == category.Id, cancellationToken)))
+                || await db.UsedCategoryIds(userId).ContainsAsync(category.Id, cancellationToken)))
         {
             return Error.Validation(new Dictionary<string, string[]> { ["kind"] = ["validation.categoryKindLocked"] });
         }
