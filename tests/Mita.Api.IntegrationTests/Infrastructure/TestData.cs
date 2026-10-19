@@ -78,14 +78,15 @@ public static class TestData
         Account account,
         Category category,
         long amount,
-        string date = "2026-10-01")
+        string date = "2026-10-01",
+        string title = "")
     {
         var transaction = Transaction.Create(
             account.UserId,
             new TransactionDetails(
                 category.Kind,
                 DateOnly.ParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture),
-                string.Empty,
+                title,
                 null,
                 category.Id,
                 account.Id,
