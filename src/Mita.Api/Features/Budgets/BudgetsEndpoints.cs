@@ -1,4 +1,5 @@
 using Mita.Api.Extensions;
+using Mita.Api.Features.Budgets.CopyBudgets;
 using Mita.Api.Features.Budgets.CreateBudget;
 using Mita.Api.Features.Budgets.DeleteBudget;
 using Mita.Api.Features.Budgets.ListBudgets;
@@ -14,6 +15,7 @@ public static class BudgetsEndpoints
             .WithTags("Budgets")
             .MapListBudgets()
             .MapCreateBudget()
+            .MapCopyBudgets()
             .MapUpdateBudget()
             .MapDeleteBudget();
 
