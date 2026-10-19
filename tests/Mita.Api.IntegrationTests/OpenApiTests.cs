@@ -148,6 +148,30 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(contributions.GetProperty("post")).ShouldBe("Goals");
     }
 
+    [Fact]
+    public async Task Should_DescribeOverviewAndReports()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/overview", out var overview).ShouldBeTrue();
+        paths.TryGetProperty("/v1/reports", out var reports).ShouldBeTrue();
+
+        TagOf(overview.GetProperty("get")).ShouldBe("Overview");
+        TagOf(reports.GetProperty("get")).ShouldBe("Reports");
+        ParameterNames(overview.GetProperty("get")).ShouldContain("period");
+        ParameterNames(reports.GetProperty("get")).ShouldContain("range");
+    }
+
+    private static string?[] ParameterNames(JsonElement operation) =>
+        operation.GetProperty("parameters").EnumerateArray()
+            .Select(parameter => parameter.GetProperty("name").GetString())
+            .ToArray();
+
     private static string? TagOf(JsonElement operation) =>
         operation.GetProperty("tags")[0].GetString();
 
