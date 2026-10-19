@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Mita.Domain.Accounts;
+using Mita.Domain.Categories;
 using Mita.Domain.Money;
+using Mita.Domain.Transactions;
 using Mita.Domain.Users;
 using Mita.Infrastructure.Authentication;
 using Mita.Infrastructure.Identity;
@@ -22,6 +24,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
 
     public DbSet<AccountMovement> AccountMovements => Set<AccountMovement>();
+
+    public DbSet<Category> Categories => Set<Category>();
+
+    public DbSet<Transaction> Transactions => Set<Transaction>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
