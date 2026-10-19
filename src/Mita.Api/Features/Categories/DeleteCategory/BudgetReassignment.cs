@@ -20,8 +20,12 @@ public static class BudgetReassignment
         CancellationToken ct)
     {
         var budgets = await db.Budgets
-            .Where(budget => budget.UserId == userId
-                && (budget.CategoryId == fromCategoryId || budget.CategoryId == otherId))
+            .FromSql($"""
+                SELECT * FROM budgets
+                WHERE "UserId" = {userId} AND ("CategoryId" = {fromCategoryId} OR "CategoryId" = {otherId})
+                ORDER BY "Id"
+                FOR UPDATE
+                """)
             .ToListAsync(ct);
         var targets = budgets
             .Where(budget => budget.CategoryId == otherId)
