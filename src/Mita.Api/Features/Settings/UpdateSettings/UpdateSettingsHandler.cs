@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Mita.Api.Authentication;
 using Mita.Api.Common;
 using Mita.Api.Common.Settings;
+using Mita.Api.Common.Transactions;
 using Mita.Domain.Users;
 using Mita.Infrastructure.Persistence;
 
@@ -14,6 +15,11 @@ public sealed class UpdateSettingsHandler(AppDbContext db, ICurrentUser currentU
     public async Task<Result<SettingsDto>> Handle(UpdateSettingsCommand command, CancellationToken cancellationToken)
     {
         var userId = currentUser.Id;
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        await db.Database
+            .SqlQuery<Guid>($"""SELECT "UserId" AS "Value" FROM user_settings WHERE "UserId" = {userId} FOR UPDATE""")
+            .ToListAsync(cancellationToken);
         var settings = await db.Set<UserSettings>().FirstOrDefaultAsync(row => row.UserId == userId, cancellationToken);
         if (settings is null)
         {
@@ -29,6 +35,12 @@ public sealed class UpdateSettingsHandler(AppDbContext db, ICurrentUser currentU
             throw new InvalidOperationException("The settings command reached the handler without passing validation.");
         }
 
+        if (settings.BaseCurrency != currency
+            && !await db.RecomputeAsync(userId, currency, cancellationToken))
+        {
+            return Error.Unavailable("rates.unavailable");
+        }
+
         settings.BaseCurrency = currency;
         settings.Locale = locale;
         settings.MonthStart = monthStart;
@@ -36,6 +48,7 @@ public sealed class UpdateSettingsHandler(AppDbContext db, ICurrentUser currentU
         settings.Notifications = notifications;
 
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return SettingsDto.From(settings);
     }
