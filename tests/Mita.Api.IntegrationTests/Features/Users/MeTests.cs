@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Mita.Api.IntegrationTests.Features.Auth;
 using Mita.Api.IntegrationTests.Infrastructure;
+using Mita.Domain.Categories;
 using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
 using Shouldly;
@@ -231,6 +232,29 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
         (await db.Accounts.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
         (await db.Transfers.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
         (await db.AccountMovements.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Should_DeleteUserWithCategoriesAndTransactions()
+    {
+        using var client = new AuthClient(factory);
+        var credentials = await client.RegisterNewAsync(Ct);
+        var userId = (await GetMeAsync(client)).GetProperty("id").GetGuid();
+        var account = await TestData.AddAccountAsync(factory, userId, openingBalance: 10_000);
+        var expense = await TestData.AddCategoryAsync(factory, userId);
+        var income = await TestData.AddCategoryAsync(factory, userId, CategoryKind.Income);
+        await TestData.AddTransactionAsync(factory, account, expense, 1_200);
+        await TestData.AddTransactionAsync(factory, account, income, 500);
+
+        using (var response = await DeleteAsync(client, new { password = credentials.Password }))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await db.Categories.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+        (await db.Transactions.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
     }
 
     [Fact]
