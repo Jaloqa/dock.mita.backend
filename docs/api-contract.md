@@ -1,4 +1,4 @@
-# API contract: authentication, users, settings, accounts, transfers, rates, categories, transactions, budgets and goals
+# API contract: authentication, users, settings, accounts, transfers, rates, categories, transactions, budgets, goals, overview and reports
 
 This document describes the HTTP contract of API version 1 for the frontend switch-over from mocks to the real backend. The OpenAPI document is served at `/openapi/v1.json`, and Scalar at `/scalar` in the Development environment.
 
@@ -43,6 +43,8 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | PUT | `/v1/goals/{id}` | required | `GoalInput` | 200 `Goal` | 400, 401, 403, 404, 503 |
 | DELETE | `/v1/goals/{id}` | required | none | 204 | 401, 403, 404 |
 | POST | `/v1/goals/{id}/contributions` | required | `GoalContributionInput` | 200 `Goal`, no `Location` header | 400, 401, 403, 404, 409, 503 |
+| GET | `/v1/overview?period` | required | none | 200 `Overview` | 400, 401, 503 |
+| GET | `/v1/reports?range` | required | none | 200 `Report` | 400, 401 |
 
 "required" means a valid access token, sent either in the `mita_at` cookie or as an `Authorization: Bearer <token>` header. Cookie authentication is what the browser frontend uses. Requests authenticated with the Bearer header are exempt from the XSRF check.
 
@@ -254,6 +256,124 @@ type GoalContributionInput = {
   fromAccountId?: string; // required when the goal is linked to an account
   rate?: number;          // manual rate, 0 < rate <= 1000000; used only for a linked goal in another currency, but still validated
 };
+
+type Overview = {
+  range: 'week' | 'month' | 'year';
+  from: string;           // YYYY-MM-DD, first day of the range
+  to: string;             // YYYY-MM-DD, last day of the range
+  previousFrom: string;   // YYYY-MM-DD, first day of the previous range
+  previousTo: string;     // YYYY-MM-DD, last day of the previous range
+  currency: Currency;     // the current base currency, every amount is in it
+  balance: {
+    amount: number;       // minor units: every account except archived accounts at 0, converted into the base currency at today's rate
+    accounts: number;     // the number of those accounts
+  };
+  income: OverviewTotal;
+  expense: OverviewTotal;
+  averageExpense: number | null; // round(expense.amount / expense.count), null without expense transactions
+  transactionCount: number;      // income.count + expense.count
+  spending: SpendingSlice[];     // at most 5 slices plus the bucket
+  month: OverviewMonth;
+  topBudgets: OverviewBudget[];  // at most 5
+  recent: OverviewTransaction[]; // at most 6
+  goals: OverviewGoal[];         // at most 3
+  goalCount: number;             // every goal of the user
+  hasTransactions: boolean;      // the user has any transaction, on any date
+};
+
+type OverviewTotal = {
+  amount: number;         // minor units of the base currency
+  count: number;
+  change: number | null;  // percent against the previous range, one decimal, null when the previous amount is 0
+};
+
+type SpendingSlice = {
+  categoryId: string | null; // null for the bucket of the remaining categories
+  name: string | null;       // null for the bucket
+  amount: number;            // minor units of the base currency
+  percent: number;           // one decimal, the percents of all slices add up to 100
+};
+
+type OverviewMonth = {
+  period: string;         // YYYY-MM, the period of today
+  from: string;           // YYYY-MM-DD
+  to: string;             // YYYY-MM-DD
+  planned: number;        // sum of limit over every budget of the period
+  spent: number;
+  left: number;           // planned - spent
+  budgets: number;        // the number of budgets of the period
+};
+
+type OverviewBudget = {
+  id: string;             // GUID
+  categoryId: string;
+  name: string;           // the category name
+  limit: number;          // minor units of the base currency
+  spent: number;
+  remaining: number;      // limit - spent, negative when over the limit
+  status: 'on_track' | 'almost_spent' | 'over_budget';
+};
+
+type OverviewTransaction = {
+  id: string;             // GUID
+  kind: CategoryKind;
+  date: string;           // YYYY-MM-DD
+  title: string;          // "" when none
+  categoryName: string;
+  accountName: string;
+  amount: number;         // minor units of the base currency (baseAmount)
+};
+
+type OverviewGoal = {
+  id: string;             // GUID
+  name: string;
+  target: number;         // minor units of the base currency
+  saved: number;
+  percent: number;        // floor(saved * 100 / target), may exceed 100
+  status: 'active' | 'reached' | 'overdue';
+  deadline: string | null; // YYYY-MM
+};
+
+type Report = {
+  range: '3m' | '6m' | '12m';
+  from: string;           // YYYY-MM-DD, first day of the first period
+  to: string;             // YYYY-MM-DD, last day of the current period
+  currency: Currency;     // the current base currency, every amount is in it
+  periods: ReportPeriod[]; // 3, 6 or 12 periods, oldest first, the last one is the period of today
+  totals: {
+    income: number;       // minor units, sum over the periods
+    expense: number;
+  };
+  averageIncome: number;  // round(totals.income / number of periods)
+  averageExpense: number;
+  savingsRate: number | null; // percent, one decimal: (income - expense) / income, null when the income is 0
+  structure: ReportStructure;
+  hasTransactions: boolean;   // the user has any transaction, on any date
+};
+
+type ReportPeriod = {
+  period: string;         // YYYY-MM
+  from: string;           // YYYY-MM-DD
+  to: string;             // YYYY-MM-DD
+  income: number;         // minor units of the base currency
+  expense: number;
+};
+
+type ReportStructure = {
+  period: string;         // YYYY-MM, the period of today
+  from: string;           // YYYY-MM-DD
+  to: string;             // YYYY-MM-DD
+  total: number;          // sum of the item amounts
+  items: ReportStructureItem[]; // every expense category with spending, largest first
+};
+
+type ReportStructureItem = {
+  categoryId: string;
+  name: string;
+  color: 'chart-1' | 'chart-2' | 'chart-3' | 'chart-4' | 'chart-5' | 'chart-6';
+  amount: number;         // minor units of the base currency
+  percent: number;        // one decimal, the percents of all items add up to 100
+};
 ```
 
 Registration creates default settings and the starter categories (see Categories). The initial locale comes from the `Accept-Language` header when it matches a supported locale, and is `en` otherwise.
@@ -339,7 +459,7 @@ Every error is an RFC 9457 `application/problem+json` document:
 | `validation.passwordTooShort` | register: fewer than 10 characters |
 | `validation.passwordTooLong` | register: more than 128 characters |
 | `validation.invalidPassword` | `DELETE /v1/me`: the password is wrong, or the account is locked after repeated failures (field `password`) |
-| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value, a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 (reported under `rate`). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `date`, `from`, `to`, `kind`, `sort` or budget `period` |
+| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value, a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 (reported under `rate`). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `date`, `from`, `to`, `kind`, `sort`, budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive) or report `range` (anything but `3m`, `6m` or `12m`) |
 | `validation.currencyLocked` | `PUT /v1/accounts/{id}`: the currency of an account that is in use cannot change (field `currency`) |
 | `validation.cardLast4` | `cardLast4` is present, not blank and not exactly 4 digits. Checked for every account type |
 | `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers or transactions, so it can only be archived (field `id`) |
@@ -375,7 +495,7 @@ Every error is an RFC 9457 `application/problem+json` document:
 | 409 | `goal.concurrentUpdate` | `POST /v1/goals/{id}/contributions` | the goal was linked to another account (or unlinked) by another request while the contribution was processed. Nothing is written. Reload the goal and retry |
 | 429 | title "Too many requests" | `/v1/auth/*` and `DELETE /v1/me` | rate limit exceeded. The `Retry-After` header holds the wait in seconds. On refresh it does not mean the session ended: wait and retry |
 | 500 | title "Server error" | any | unexpected failure. Report the `correlationId` |
-| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `DELETE /v1/categories/{id}` | a conversion that needs an exchange rate that is not stored yet: a cross-currency transfer, transaction or contribution without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions and contributions can also send a manual `rate` (only for the entered-to-account conversion). On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500 |
+| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `DELETE /v1/categories/{id}`, `GET /v1/overview` | a conversion that needs an exchange rate that is not stored yet: a cross-currency transfer, transaction or contribution without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions and contributions can also send a manual `rate` (only for the entered-to-account conversion). On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500. On `GET /v1/overview` it is returned when the balance, a budget or a goal needs a rate that is not stored |
 
 ### Rate limiting and lockout
 
@@ -495,3 +615,35 @@ Every budget and goal belongs to the current user, and an id of another user ans
 - A goal with a linked account needs `fromAccountId` (an unarchived account of the user, other than the linked one) and creates a transfer from it to the linked account with `note` equal to the goal name. The rules of transfers apply: the same currency gives rate 1, otherwise the manual `rate` (rounded to 6 decimals), otherwise the stored rate of `date`; `rate: ["validation.positiveAmount"]` and `rate: ["validation.invalidValue"]` for a converted amount that rounds to 0 or is too large; 503 `rates.unavailable` when a rate is missing. The transfer appears in `GET /v1/transfers` and changes both balances.
 - `saved` grows by the amount received by the linked account, valued in the base currency at the rate of `date`.
 - If the goal is linked to another account or unlinked by another request while the contribution runs, nothing is written and the answer is 409 `goal.concurrentUpdate`.
+
+## Overview and reports
+
+`GET /v1/overview` and `GET /v1/reports` are read-only and scoped to the current user. Every amount is in minor units of the current base currency, "today" is the UTC date of the server, and the financial periods follow `monthStartDay` (see Financial periods). Changing the base currency re-prices every figure. Neither answer is cached, because the figures depend on today, the rates and every write to accounts, transfers, categories, transactions, budgets, goals and settings. Neither is paginated: the embedded lists are capped by the contract (5 slices plus the bucket, 5 budgets, 6 transactions, 3 goals, at most 12 report periods), and the report structure lists every expense category with spending because the chart needs all of them.
+
+### Counted transactions
+
+Both endpoints count the transactions of the user dated inside a range (both days inclusive) whose category is not the `transfer` category, by `baseAmount`. Income and expense are summed separately, and `count` is the number of transactions of each kind.
+
+### Overview
+
+- `period` is `week`, `month` (default) or `year`, case-sensitive. Any other value, including an empty one, answers 400 `period: ["validation.invalidValue"]`.
+- Ranges: `week` is the last 7 days ending today (`from` is today minus 6), and the previous range is the 7 days before it. `month` is the financial period of today, and the previous range is the period before it. `year` is the 12 financial periods ending with the period of today, and the previous range is the 12 periods before them.
+- `income.change` and `expense.change` compare the amount with the previous range: `round((current - previous) * 100 / previous)` to one decimal, with halves rounded towards positive infinity, and a drop is negative. They are `null` when the previous amount is 0, and never `-0`. `averageExpense` is `expense.amount / expense.count` rounded half away from zero, `null` without expenses.
+- `spending` is the expense per category inside the range, largest first (ties by name), without the `transfer` category. Only categories with spending above 0 are listed. The five largest become slices. Every other category, and the `other` category whatever its size, join one bucket with `categoryId: null` and `name: null`, appended last when its amount is above 0. `percent` is the share of the total with one decimal, split by the largest remainder so that the percents add up to exactly 100.0. Without expenses the list is empty.
+- `balance.amount` is the sum of the balances of every account except archived accounts whose balance is 0, each converted into the base currency at today's rate and rounded half away from zero. An archived account that still holds money counts. `balance.accounts` is the number of counted accounts.
+- `month` is always the financial period of today, whatever the range: `planned` is the sum of the budget limits, `spent` the sum of the spent amounts, `left` their difference, and `budgets` the number of budgets.
+- `topBudgets` lists the budgets of that period by usage (`spent / limit`) descending, then by `spent` descending, then by creation order, at most 5. `name` is the category name, and the other fields are those of `Budget`.
+- `recent` lists the counted transactions of the range, newest first (`date`, then creation time, then `id`, all descending), at most 6. `amount` is the `baseAmount`.
+- `goals` lists the goals that are not reached first, then the reached ones, each group in creation order, at most 3. `goalCount` counts every goal.
+- `hasTransactions` is true when the user has any transaction on any date, so the client can tell a new user from an empty range.
+- A user with no data gets a complete document with zeros, empty lists and `change: null`.
+- 503 `rates.unavailable`: the balance of an account in another currency, a budget or a goal needs a rate that is not stored, so nothing can be converted. The case cannot happen when every currency in use has a stored rate. The figures are read in one consistent snapshot.
+
+### Reports
+
+- `range` is `3m`, `6m` (default) or `12m`, case-sensitive. Any other value answers 400 `range: ["validation.invalidValue"]`.
+- `periods` are the 3, 6 or 12 financial periods ending with the period of today, oldest first. `from` is the first day of the first period and `to` the last day of the current one. Every period is present, with 0 for income and expense when it has no transactions. A transaction lands in the period that contains its date.
+- `totals` are the sums over the periods. `averageIncome` and `averageExpense` are the totals divided by the number of periods and rounded half away from zero.
+- `savingsRate` is `(income - expense) / income` in percent with one decimal, rounded half away from zero, and can be negative. It is `null` when the income is 0, and never `-0`.
+- `structure` covers the current period only: the expense per category, largest first (ties by name), without the `transfer` category and with the `other` category as a normal item. Only categories with spending above 0 are listed, and there is no top-N cut. `percent` is split like the overview spending, so the percents add up to 100.0, and `total` is the sum of the amounts. Without expenses `items` is empty and `total` is 0.
+- Reports read only the stored `baseAmount`, so they never need an exchange rate and never answer 503. The figures are read in one consistent snapshot.
