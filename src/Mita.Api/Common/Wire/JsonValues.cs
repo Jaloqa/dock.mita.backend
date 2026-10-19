@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Mita.Domain.Money;
+using Mita.Domain.Periods;
 
 namespace Mita.Api.Common.Wire;
 
@@ -31,6 +32,12 @@ public static class JsonValues
     {
         date = default;
         return TryGetString(element, out var text) && IsoDate.TryParse(text, out date);
+    }
+
+    public static bool TryGetPeriodKey(JsonElement? element, out PeriodKey key)
+    {
+        key = default;
+        return TryGetString(element, out var text) && PeriodKey.TryParse(text, out key);
     }
 
     public static bool TryGetGuid(JsonElement? element, out Guid id)
