@@ -119,6 +119,35 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(transaction.GetProperty("delete")).ShouldBe("Transactions");
     }
 
+    [Fact]
+    public async Task Should_DescribeBudgetsAndGoals()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/budgets", out var budgets).ShouldBeTrue();
+        paths.TryGetProperty("/v1/budgets/{id}", out var budget).ShouldBeTrue();
+        paths.TryGetProperty("/v1/budgets/copy", out var copy).ShouldBeTrue();
+        paths.TryGetProperty("/v1/goals", out var goals).ShouldBeTrue();
+        paths.TryGetProperty("/v1/goals/{id}", out var goal).ShouldBeTrue();
+        paths.TryGetProperty("/v1/goals/{id}/contributions", out var contributions).ShouldBeTrue();
+
+        TagOf(budgets.GetProperty("get")).ShouldBe("Budgets");
+        TagOf(budgets.GetProperty("post")).ShouldBe("Budgets");
+        TagOf(budget.GetProperty("put")).ShouldBe("Budgets");
+        TagOf(budget.GetProperty("delete")).ShouldBe("Budgets");
+        TagOf(copy.GetProperty("post")).ShouldBe("Budgets");
+        TagOf(goals.GetProperty("get")).ShouldBe("Goals");
+        TagOf(goals.GetProperty("post")).ShouldBe("Goals");
+        TagOf(goal.GetProperty("put")).ShouldBe("Goals");
+        TagOf(goal.GetProperty("delete")).ShouldBe("Goals");
+        TagOf(contributions.GetProperty("post")).ShouldBe("Goals");
+    }
+
     private static string? TagOf(JsonElement operation) =>
         operation.GetProperty("tags")[0].GetString();
 
