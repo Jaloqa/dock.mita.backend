@@ -64,6 +64,33 @@ public sealed class RegisterTests(MitaApiFactory factory) : IClassFixture<MitaAp
         user.UserName.ShouldBe(credentials.Email);
     }
 
+    [Fact]
+    public async Task Should_SeedStarterCategories_When_UserRegisters()
+    {
+        using var polish = new AuthClient(factory);
+        using var english = new AuthClient(factory);
+        using var registeredPolish = await polish.RegisterAsync(AuthClient.NewCredentials(), "pl", Ct);
+        using var registeredEnglish = await english.RegisterAsync(AuthClient.NewCredentials(), ct: Ct);
+        registeredPolish.StatusCode.ShouldBe(HttpStatusCode.Created);
+        registeredEnglish.StatusCode.ShouldBe(HttpStatusCode.Created);
+
+        var items = (await CategoriesAsync(polish)).EnumerateArray().ToList();
+
+        items.Count.ShouldBe(18);
+        items.Select(item => item.GetProperty("name").GetString()).ShouldBe(
+        [
+            "Spożywcze", "Transport", "Mieszkanie", "Kawiarnie", "Zdrowie", "Zakupy", "Rozrywka", "Prezenty", "Inne",
+            "Przelewy", "Wynagrodzenie", "Freelance", "Prezent", "Odsetki", "Zwrot", "Sprzedaż", "Premia", "Inne"
+        ]);
+        items.Select(item => item.GetProperty("system").GetString()).ShouldBe(
+        [
+            null, null, null, null, null, null, null, null, "other",
+            "transfer", null, null, null, null, null, null, null, "other"
+        ]);
+        items.ShouldAllBe(item => !item.GetProperty("inUse").GetBoolean());
+        (await CategoriesAsync(english))[0].GetProperty("name").GetString().ShouldBe("Groceries");
+    }
+
     [Theory]
     [InlineData("o'brien+tag@example.com")]
     [InlineData("zoë@x.de")]
@@ -173,6 +200,13 @@ public sealed class RegisterTests(MitaApiFactory factory) : IClassFixture<MitaAp
         var normalized = email.ToUpperInvariant();
         (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users
             .CountAsync(user => user.NormalizedEmail == normalized, Ct)).ShouldBe(1);
+    }
+
+    private static async Task<JsonElement> CategoriesAsync(AuthClient client)
+    {
+        using var response = await client.Http.GetAsync("/v1/categories", Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        return (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("items");
     }
 
     private static async Task<Dictionary<string, string[]>> ErrorsAsync(AuthClient client, object body)
