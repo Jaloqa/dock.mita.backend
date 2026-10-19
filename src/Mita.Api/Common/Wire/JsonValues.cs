@@ -5,6 +5,8 @@ namespace Mita.Api.Common.Wire;
 
 public static class JsonValues
 {
+    private const double MaxSafeInteger = 9_007_199_254_740_991;
+
     public static bool IsMissing(JsonElement? element) => element switch
     {
         null => true,
@@ -22,6 +24,50 @@ public static class JsonValues
         }
 
         value = text.GetString() ?? string.Empty;
+        return true;
+    }
+
+    public static bool TryGetIsoDate(JsonElement? element, out DateOnly date)
+    {
+        date = default;
+        return TryGetString(element, out var text) && IsoDate.TryParse(text, out date);
+    }
+
+    public static bool TryGetGuid(JsonElement? element, out Guid id)
+    {
+        id = Guid.Empty;
+        return TryGetString(element, out var text) && Guid.TryParse(text, out id);
+    }
+
+    public static bool TryGetSafeInteger(JsonElement? element, out double value)
+    {
+        value = 0;
+        return element is { ValueKind: JsonValueKind.Number } number
+            && number.TryGetDouble(out value)
+            && value == Math.Floor(value)
+            && Math.Abs(value) <= MaxSafeInteger;
+    }
+
+    public static bool TryGetOptionalText(JsonElement? element, out string? text)
+    {
+        text = null;
+        if (IsMissing(element))
+        {
+            return true;
+        }
+
+        if (!TryGetString(element, out var value))
+        {
+            return false;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.Any(char.IsControl))
+        {
+            return false;
+        }
+
+        text = trimmed;
         return true;
     }
 
