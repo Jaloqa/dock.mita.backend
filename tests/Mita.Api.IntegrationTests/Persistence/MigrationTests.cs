@@ -1,5 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Mita.Api.IntegrationTests.Infrastructure;
+using Mita.Domain.Categories;
+using Mita.Domain.Users;
 using Mita.Infrastructure.Persistence;
 using Npgsql;
 using Shouldly;
@@ -30,22 +34,67 @@ public sealed class MigrationTests(PostgresFixture postgres)
             """
             SELECT table_name FROM information_schema.tables
             WHERE table_schema = 'public' AND table_name IN ('AspNetUsers', 'user_settings', 'refresh_tokens',
-                'accounts', 'transfers', 'exchange_rates', 'account_movements')
+                'accounts', 'transfers', 'exchange_rates', 'account_movements', 'categories', 'transactions')
             """,
             connection);
         var tables = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
         {
-            tables.Add(reader.GetString(0));
+            while (await reader.ReadAsync(ct))
+            {
+                tables.Add(reader.GetString(0));
+            }
         }
 
         tables.ShouldBe(
             [
                 "AspNetUsers", "refresh_tokens", "user_settings", "accounts", "transfers", "exchange_rates",
-                "account_movements"
+                "account_movements", "categories", "transactions"
             ],
             ignoreOrder: true);
+
+        await using var function = new NpgsqlCommand(
+            "SELECT count(*) FROM pg_proc WHERE proname = 'pln_value'",
+            connection);
+        ((long)(await function.ExecuteScalarAsync(ct))!).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Should_BackfillStarterCategories_When_UserExistedBeforeMigration()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = postgres.NewDatabaseConnectionString();
+        await using var context = NewContext(connectionString);
+        await context.GetService<IMigrator>().MigrateAsync("AccountsTransfersRates", cancellationToken: ct);
+        var users = new[] { Locale.Pl, Locale.Uk, Locale.En, Locale.Ru }
+            .Select(locale => (UserId: Guid.NewGuid(), Locale: locale))
+            .ToList();
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync(ct);
+            foreach (var (userId, locale) in users)
+            {
+                await InsertUserWithSettings(connection, userId, locale.ToString(), ct);
+            }
+        }
+
+        await context.Database.MigrateAsync(ct);
+
+        foreach (var (userId, locale) in users)
+        {
+            var stored = await context.Categories.AsNoTracking()
+                .Where(category => category.UserId == userId)
+                .OrderBy(category => category.Position)
+                .Select(category => new { category.Name, category.Kind, category.Color, category.System, category.Position })
+                .ToListAsync(ct);
+            var expected = StarterCategories.For(userId, locale)
+                .Select(category => new { category.Name, category.Kind, category.Color, category.System, category.Position })
+                .ToList();
+
+            stored.Count.ShouldBe(18);
+            stored.ShouldBe(expected);
+            stored.Select(category => category.Position).ShouldBe(Enumerable.Range(0, 18));
+        }
     }
 
     [Fact]
@@ -71,6 +120,28 @@ public sealed class MigrationTests(PostgresFixture postgres)
     {
         await using var command = new NpgsqlCommand(InsertUser, connection);
         command.Parameters.AddWithValue("id", Guid.NewGuid());
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task InsertUserWithSettings(
+        NpgsqlConnection connection,
+        Guid userId,
+        string locale,
+        CancellationToken ct)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO "AspNetUsers" ("Id", "Name", "NormalizedEmail", "EmailConfirmed", "PhoneNumberConfirmed",
+                "TwoFactorEnabled", "LockoutEnabled", "AccessFailedCount", "CreatedAt", "UpdatedAt")
+            VALUES (@id, 'Anna', @email, false, false, false, true, 0, now(), now());
+            INSERT INTO user_settings ("UserId", "BaseCurrency", "Locale", "MonthStartDay", "Theme",
+                "NotifyBudgetLimit", "NotifyDailyReminder", "NotifyGoals", "NotifyWeeklyReport")
+            VALUES (@id, 'PLN', @locale, 1, 'System', true, false, true, true);
+            """,
+            connection);
+        command.Parameters.AddWithValue("id", userId);
+        command.Parameters.AddWithValue("email", $"{userId:N}@EXAMPLE.COM");
+        command.Parameters.AddWithValue("locale", locale);
         await command.ExecuteNonQueryAsync(ct);
     }
 }
