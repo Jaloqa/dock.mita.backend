@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Mita.Api.Common;
 using Mita.Api.Common.Users;
+using Mita.Domain.Categories;
 using Mita.Domain.Users;
 using Mita.Infrastructure.Authentication;
 using Mita.Infrastructure.Identity;
@@ -44,6 +45,7 @@ public sealed class RegisterHandler(AppDbContext db, UserManager<AppUser> userMa
             }
 
             db.UserSettings.Add(UserSettings.CreateDefault(user.Id, command.Locale));
+            db.Categories.AddRange(StarterCategories.For(user.Id, command.Locale));
             await db.SaveChangesAsync(cancellationToken);
 
             var issued = await tokens.IssueAsync(user, null, cancellationToken);

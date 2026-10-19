@@ -2,6 +2,7 @@ using Mita.Api.Authentication;
 using Mita.Api.Extensions;
 using Mita.Api.Features.Accounts;
 using Mita.Api.Features.Auth;
+using Mita.Api.Features.Categories;
 using Mita.Api.Features.Rates;
 using Mita.Api.Features.Settings;
 using Mita.Api.Features.System;
@@ -50,6 +51,7 @@ app.MapSettingsEndpoints();
 app.MapRatesEndpoints();
 app.MapAccountsEndpoints();
 app.MapTransfersEndpoints();
+app.MapCategoriesEndpoints();
 
 if (app.Environment.IsEnvironment("Testing"))
 {
