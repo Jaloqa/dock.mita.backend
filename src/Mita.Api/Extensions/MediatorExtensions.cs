@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.Extensions.Caching.Hybrid;
 using Mita.Api.Behaviors;
 using Mita.Api.Common.Caching;
+using Mita.Api.Common.Transactions;
 
 namespace Mita.Api.Extensions;
 
@@ -18,6 +19,7 @@ public static class MediatorExtensions
             options.AddOpenBehavior(typeof(CachingBehavior<,>));
         });
         services.AddValidatorsFromAssemblyContaining<Program>();
+        services.AddScoped<TransactionWriter>();
         services.AddSingleton<IHybridCacheSerializerFactory, ResultCacheSerializerFactory>();
         return services;
     }
