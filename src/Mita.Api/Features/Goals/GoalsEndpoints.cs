@@ -1,4 +1,5 @@
 using Mita.Api.Extensions;
+using Mita.Api.Features.Goals.ContributeToGoal;
 using Mita.Api.Features.Goals.CreateGoal;
 using Mita.Api.Features.Goals.DeleteGoal;
 using Mita.Api.Features.Goals.ListGoals;
@@ -15,7 +16,8 @@ public static class GoalsEndpoints
             .MapListGoals()
             .MapCreateGoal()
             .MapUpdateGoal()
-            .MapDeleteGoal();
+            .MapDeleteGoal()
+            .MapContributeToGoal();
 
         return app;
     }
