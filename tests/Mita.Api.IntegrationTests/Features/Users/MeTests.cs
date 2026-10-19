@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Mita.Api.IntegrationTests.Features.Auth;
 using Mita.Api.IntegrationTests.Infrastructure;
+using Mita.Domain.Accounts;
 using Mita.Domain.Categories;
 using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
@@ -255,6 +256,30 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         (await db.Categories.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
         (await db.Transactions.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Should_DeleteUserWithBudgetsAndGoals()
+    {
+        using var client = new AuthClient(factory);
+        var credentials = await client.RegisterNewAsync(Ct);
+        var userId = (await GetMeAsync(client)).GetProperty("id").GetGuid();
+        var savings = await TestData.AddAccountAsync(factory, userId, type: AccountType.Savings);
+        var category = await TestData.AddCategoryAsync(factory, userId);
+        await TestData.AddBudgetAsync(factory, userId, category.Id, "2026-10", 50_000);
+        var goal = await TestData.AddGoalAsync(factory, userId, "Holiday", 100_000, accountId: savings.Id);
+        await TestData.AddContributionAsync(factory, goal, "2026-10-05", 10_000);
+
+        using (var response = await DeleteAsync(client, new { password = credentials.Password }))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await db.Budgets.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+        (await db.Goals.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+        (await db.GoalContributions.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
     }
 
     [Fact]
