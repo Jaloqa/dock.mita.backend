@@ -20,13 +20,13 @@ public sealed class UpdateCategoryKindValidator : AbstractValidator<UpdateCatego
                 }
 
                 var userId = currentUser.Id;
+                var used = db.UsedCategoryIds(userId);
                 var stored = await db.Categories.AsNoTracking()
                     .Where(category => category.Id == command.Id && category.UserId == userId)
                     .Select(category => new
                     {
                         category.Kind,
-                        Locked = category.System != null
-                            || db.Transactions.Any(transaction => transaction.CategoryId == category.Id)
+                        Locked = category.System != null || used.Contains(category.Id)
                     })
                     .SingleOrDefaultAsync(cancellationToken);
 
