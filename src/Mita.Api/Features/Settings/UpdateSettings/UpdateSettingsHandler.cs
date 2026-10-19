@@ -36,7 +36,8 @@ public sealed class UpdateSettingsHandler(AppDbContext db, ICurrentUser currentU
         }
 
         if (settings.BaseCurrency != currency
-            && !await db.RecomputeAsync(userId, currency, cancellationToken))
+            && (!await db.CoverAsync(userId, currency, cancellationToken)
+                || !await db.RecomputeAsync(userId, currency, cancellationToken)))
         {
             return Error.Unavailable("rates.unavailable");
         }
