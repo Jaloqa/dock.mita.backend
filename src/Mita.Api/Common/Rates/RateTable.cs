@@ -34,6 +34,27 @@ public static class RateTable
         return values;
     }
 
+    public static async Task<decimal?> ResolveAsync(
+        this AppDbContext db,
+        Currency from,
+        Currency to,
+        decimal? manualRate,
+        DateOnly date,
+        CancellationToken ct)
+    {
+        if (from == to)
+        {
+            return 1m;
+        }
+
+        if (manualRate is { } manual)
+        {
+            return ExchangeRate.Round(manual);
+        }
+
+        return Rate(await db.PlnValuesAsync(date, ct), from, to);
+    }
+
     public static decimal? Rate(IReadOnlyDictionary<Currency, decimal> plnValues, Currency from, Currency to)
     {
         if (from == to)

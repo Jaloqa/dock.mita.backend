@@ -16,16 +16,16 @@ public sealed class CreateTransferHandler(AppDbContext db, ICurrentUser currentU
 {
     public async Task<Result<TransferDto>> Handle(CreateTransferCommand command, CancellationToken cancellationToken)
     {
-        if (!CreateTransferFields.TryGetDate(command.Date, out var date)
-            || !CreateTransferFields.TryGetAccountId(command.FromAccountId, out var fromId)
-            || !CreateTransferFields.TryGetAccountId(command.ToAccountId, out var toId)
+        if (!JsonValues.TryGetIsoDate(command.Date, out var date)
+            || !JsonValues.TryGetGuid(command.FromAccountId, out var fromId)
+            || !JsonValues.TryGetGuid(command.ToAccountId, out var toId)
             || !JsonValues.TryGetMinorAmount(command.FromAmount, out var fromAmount)
-            || !CreateTransferFields.TryGetNote(command.Note, out var note))
+            || !JsonValues.TryGetOptionalText(command.Note, out var note))
         {
             throw new InvalidOperationException("The transfer must be validated before the handler runs.");
         }
 
-        decimal? manualRate = CreateTransferFields.TryGetRate(command.Rate, out var given) ? given : null;
+        decimal? manualRate = ManualRate.TryParse(command.Rate, out var given) ? given : null;
         var userId = currentUser.Id;
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -47,7 +47,7 @@ public sealed class CreateTransferHandler(AppDbContext db, ICurrentUser currentU
         var from = locked.Single(account => account.Id == fromId);
         var to = locked.Single(account => account.Id == toId);
 
-        var rate = await ResolveRateAsync(from.Currency, to.Currency, manualRate, date, cancellationToken);
+        var rate = await db.ResolveAsync(from.Currency, to.Currency, manualRate, date, cancellationToken);
         if (rate is null)
         {
             return Error.Unavailable("rates.unavailable");
@@ -77,25 +77,5 @@ public sealed class CreateTransferHandler(AppDbContext db, ICurrentUser currentU
             transfer.ToAmount,
             (double)transfer.Rate,
             transfer.Note);
-    }
-
-    private async Task<decimal?> ResolveRateAsync(
-        Currency from,
-        Currency to,
-        decimal? manualRate,
-        DateOnly date,
-        CancellationToken cancellationToken)
-    {
-        if (from == to)
-        {
-            return 1m;
-        }
-
-        if (manualRate is { } manual)
-        {
-            return ExchangeRate.Round(manual);
-        }
-
-        return RateTable.Rate(await db.PlnValuesAsync(date, cancellationToken), from, to);
     }
 }
