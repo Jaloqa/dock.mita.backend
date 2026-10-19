@@ -1,4 +1,4 @@
-# API contract: authentication, users, settings, accounts, transfers and rates
+# API contract: authentication, users, settings, accounts, transfers, rates, categories and transactions
 
 This document describes the HTTP contract of API version 1 for the frontend switch-over from mocks to the real backend. The OpenAPI document is served at `/openapi/v1.json`, and Scalar at `/scalar` in the Development environment.
 
@@ -16,7 +16,7 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | PUT | `/v1/me` | required | `{ name, email }` | 200 `User` | 400, 401, 403, 409 |
 | DELETE | `/v1/me` | required | `{ password }` | 204, clears cookies | 400, 401, 403, 429 |
 | GET | `/v1/settings` | required | none | 200 `Settings` | 401 |
-| PUT | `/v1/settings` | required | `Settings` | 200 `Settings` | 400, 401, 403 |
+| PUT | `/v1/settings` | required | `Settings` | 200 `Settings` | 400, 401, 403, 503 |
 | GET | `/v1/accounts?page&pageSize` | required | none | 200 `Page<Account>` | 400, 401 |
 | POST | `/v1/accounts` | required | `AccountInput` | 201 `Account`, `Location` header | 400, 401, 403 |
 | PUT | `/v1/accounts/{id}` | required | `AccountInput` | 200 `Account` | 400, 401, 403, 404 |
@@ -24,6 +24,15 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | GET | `/v1/transfers?accountId&page&pageSize` | required | none | 200 `Page<Transfer>` | 400, 401 |
 | POST | `/v1/transfers` | required | `TransferInput` | 201 `Transfer`, no `Location` header | 400, 401, 403, 503 |
 | GET | `/v1/rates?date&from&to` | required | none | 200 `Rate[]` | 400, 401 |
+| GET | `/v1/categories?kind&page&pageSize` | required | none | 200 `Page<Category>` | 400, 401 |
+| POST | `/v1/categories` | required | `CategoryInput` | 201 `Category`, `Location` header | 400, 401, 403 |
+| PUT | `/v1/categories/{id}` | required | `CategoryInput` | 200 `Category` | 400, 401, 403, 404 |
+| DELETE | `/v1/categories/{id}` | required | none | 204 | 400, 401, 403, 404 |
+| GET | `/v1/transactions?search&categoryId&accountId&kind&from&to&sort&page&pageSize` | required | none | 200 `TransactionPage` | 400, 401 |
+| GET | `/v1/transactions/{id}` | required | none | 200 `Transaction` | 401, 404 |
+| POST | `/v1/transactions` | required | `TransactionInput` | 201 `Transaction`, `Location` header | 400, 401, 403, 503 |
+| PUT | `/v1/transactions/{id}` | required | `TransactionInput` | 200 `Transaction` | 400, 401, 403, 404, 503 |
+| DELETE | `/v1/transactions/{id}` | required | none | 204 | 401, 403, 404 |
 
 "required" means a valid access token, sent either in the `mita_at` cookie or as an `Authorization: Bearer <token>` header. Cookie authentication is what the browser frontend uses. Requests authenticated with the Bearer header are exempt from the XSRF check.
 
@@ -69,10 +78,10 @@ type Account = {
   type: 'card' | 'cash' | 'savings';
   currency: Currency;
   openingBalance: number; // minor units
-  balance: number;        // minor units, computed by the server: openingBalance plus every transfer leg
+  balance: number;        // minor units, computed by the server: openingBalance plus every transfer leg plus every transaction (income adds, expense subtracts, in the account currency)
   cardLast4: string | null;
   archived: boolean;
-  inUse: boolean;         // the account has at least one transfer
+  inUse: boolean;         // the account has at least one transfer or transaction
   linkedGoals: number;    // always 0 until goals exist
 };
 
@@ -111,9 +120,58 @@ type Rate = {
   to: Currency;
   value: number;          // units of "to" per 1 unit of "from"
 };
+
+type CategoryKind = 'expense' | 'income';
+
+type Category = {
+  id: string;             // GUID
+  name: string;
+  kind: CategoryKind;
+  color: 'chart-1' | 'chart-2' | 'chart-3' | 'chart-4' | 'chart-5' | 'chart-6';
+  system: 'transfer' | 'other' | null;
+  inUse: boolean;         // the category has at least one transaction
+};
+
+type CategoryInput = {
+  name: string;           // 1 to 40 characters after trimming, no control characters, unique per kind
+  kind: CategoryKind;
+  color: 'chart-1' | 'chart-2' | 'chart-3' | 'chart-4' | 'chart-5' | 'chart-6';
+};
+
+type Transaction = {
+  id: string;             // GUID
+  kind: CategoryKind;
+  date: string;           // YYYY-MM-DD
+  title: string;          // "" when none
+  note: string | null;
+  categoryId: string;
+  accountId: string;
+  amount: number;         // minor units of the entered currency
+  currency: Currency;     // the entered currency
+  accountAmount: number;  // minor units of the account currency
+  rate: number;           // entered currency to account currency, 1 for the same currency
+  baseAmount: number;     // minor units of the current base currency
+};
+
+type TransactionInput = {
+  kind: CategoryKind;
+  date: string;           // YYYY-MM-DD, at most one year after today (UTC)
+  title?: string;         // up to 100 characters after trimming
+  note?: string | null;   // up to 200 characters after trimming
+  categoryId: string;
+  accountId: string;
+  amount: number;         // integer minor units, 1 to 100000000000
+  currency: Currency;     // any supported currency, converted into the account currency
+  rate?: number;          // manual rate, 0 < rate <= 1000000; not used for the same currency, but still validated
+};
+
+type TransactionPage = Page<Transaction> & {
+  sum: number;            // minor units of the base currency, over every filtered row, not only the page
+  currency: Currency;     // the current base currency
+};
 ```
 
-Registration creates default settings. The initial locale comes from the `Accept-Language` header when it matches a supported locale, and is `en` otherwise.
+Registration creates default settings and the starter categories (see Categories). The initial locale comes from the `Accept-Language` header when it matches a supported locale, and is `en` otherwise.
 
 Passwords must be 10 to 128 characters long.
 
@@ -196,15 +254,22 @@ Every error is an RFC 9457 `application/problem+json` document:
 | `validation.passwordTooShort` | register: fewer than 10 characters |
 | `validation.passwordTooLong` | register: more than 128 characters |
 | `validation.invalidPassword` | `DELETE /v1/me`: the password is wrong, or the account is locked after repeated failures (field `password`) |
-| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value, a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 (reported under `rate`). In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `date`, `from` or `to` |
+| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value, a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 (reported under `rate`). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `date`, `from`, `to`, `kind` or `sort` |
 | `validation.currencyLocked` | `PUT /v1/accounts/{id}`: the currency of an account that is in use cannot change (field `currency`) |
 | `validation.cardLast4` | `cardLast4` is present, not blank and not exactly 4 digits. Checked for every account type |
-| `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers, so it can only be archived (field `id`) |
-| `validation.dateTooFar` | transfer `date` is later than today plus one year |
-| `validation.unknownAccount` | transfer `fromAccountId` or `toAccountId` is not one of the user's accounts |
-| `validation.archivedAccount` | transfer `fromAccountId` or `toAccountId` is an archived account |
+| `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers or transactions, so it can only be archived (field `id`) |
+| `validation.dateTooFar` | transfer or transaction `date` is later than today plus one year |
+| `validation.unknownAccount` | transfer `fromAccountId` or `toAccountId`, or transaction `accountId`, is not one of the user's accounts (or not a GUID) |
+| `validation.archivedAccount` | transfer `fromAccountId` or `toAccountId`, or transaction `accountId`, is an archived account. On `PUT /v1/transactions/{id}` the account the transaction already has is allowed even when archived |
 | `validation.sameAccount` | transfer `toAccountId` equals `fromAccountId` |
-| `validation.positiveAmount` | transfer `fromAmount` is 0 or negative, or the converted amount rounds to 0 (reported under `rate`) |
+| `validation.positiveAmount` | transfer `fromAmount` or transaction `amount` is 0 or negative, or the converted amount rounds to 0 (reported under `rate`) |
+| `validation.categoryNameTaken` | `POST`/`PUT /v1/categories`: another category of the same kind has this name, compared case-insensitively after trimming (field `name`) |
+| `validation.categoryKindLocked` | `PUT /v1/categories/{id}`: the kind of a system category, or of a category that is in use, cannot change (field `kind`) |
+| `validation.systemCategory` | `DELETE /v1/categories/{id}`: a system category cannot be deleted (field `id`) |
+| `validation.unknownCategory` | transaction `categoryId` is not one of the user's categories, is not a GUID, or is the `transfer` category. Also returned when the category was deleted at the same moment |
+| `validation.categoryKindMismatch` | transaction `categoryId` has a different kind than the transaction `kind`. Checked only when `kind` itself is valid |
+| `validation.titleTooLong` | transaction `title` is longer than 100 characters after trimming |
+| `validation.noteTooLong` | transaction `note` is longer than 200 characters after trimming (transfers report this as `validation.invalidValue`) |
 
 ### Other error codes
 
@@ -219,7 +284,7 @@ Every error is an RFC 9457 `application/problem+json` document:
 | 409 | `user.concurrentUpdate` | `PUT /v1/me` | the account was changed by another request at the same time. Reload and retry |
 | 429 | title "Too many requests" | `/v1/auth/*` and `DELETE /v1/me` | rate limit exceeded. The `Retry-After` header holds the wait in seconds. On refresh it does not mean the session ended: wait and retry |
 | 500 | title "Server error" | any | unexpected failure. Report the `correlationId` |
-| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers` | a cross-currency transfer without a manual `rate` while no exchange rates are stored yet. Retry later or send a manual `rate` |
+| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings` | a conversion that needs an exchange rate that is not stored yet: a cross-currency transfer or transaction without a manual `rate` (a transaction may also need the rate between the account and base currencies), or a base currency change while some currency used by a transaction has no stored rate at all. Nothing is written. Retry later; transfers and transactions can also send a manual `rate` (only for the entered-to-account conversion) |
 
 ### Rate limiting and lockout
 
@@ -243,9 +308,9 @@ Validation runs before the lookup. An invalid body sent to an unknown account id
 ### Accounts
 
 - `GET /v1/accounts`: `pageSize` defaults to 100 (maximum 100). Accounts are ordered by creation time.
-- `balance` is `openingBalance` plus the sum of the account's transfer legs, computed by the server. `inUse` is true when the account has any transfer. `linkedGoals` is always 0 for now.
+- `balance` is `openingBalance` plus the sum of the account's transfer legs and transactions (`+accountAmount` for income, `-accountAmount` for expense), computed by the server. `inUse` is true when the account has any transfer or transaction. `linkedGoals` is always 0 for now.
 - `DELETE` removes an account that has no history. An account in use answers 400 `id: ["validation.accountInUse"]`: archive it with `PUT` and `archived: true` instead. Deleting a missing id answers 404.
-- `PUT` replaces the editable fields. The currency of an account in use cannot change (`validation.currencyLocked`).
+- `PUT` replaces the editable fields. The currency of an account in use (with a transfer or a transaction) cannot change (`validation.currencyLocked`).
 - `cardLast4` is validated for every type but stored only for `card`; other types answer `null`.
 
 ### Transfers
@@ -265,3 +330,39 @@ Validation runs before the lookup. An invalid body sent to an unknown account id
 - For a date, the rate of each currency is the latest stored one on or before that date. For weekends, holidays and future dates that is the latest earlier rate, and for a date before the history start it is the earliest stored rate. Cross rates go through PLN and are rounded to 6 decimals.
 - Pairs whose currencies have no stored rate are omitted, so the array can be empty right after the first start.
 - The response is cached for up to an hour and is the same for every user.
+
+## Categories and transactions
+
+Every category and transaction belongs to the current user, and an id of another user answers exactly like an unknown id (404). The validation rules of the previous section apply: the first failing rule per field, all failing fields in one 400, a whitespace-only string counts as missing, and validation runs before the lookup. A `title`, `note` or category `name` that is not a string or contains a control character answers `validation.invalidValue`.
+
+### Categories
+
+- `GET /v1/categories`: `pageSize` defaults to 100 (maximum 100). The optional `kind` query (`expense` or `income`) filters, and an unknown value answers 400 `kind: ["validation.invalidValue"]`. Categories are ordered by kind (`expense` first), then the system ones last (`other`, then `transfer`), then by creation order. The starter categories keep the order of the list below.
+- Each user gets a starter set of 18 categories, created at registration in the registration locale (`Accept-Language`, `en` by default). Users that existed before categories were introduced got the set in their settings locale. Names are stored, so a later locale change does not rename them.
+  - expense: Groceries, Transport, Housing, Cafes, Health, Shopping, Leisure, Gifts, Other (system `other`), Transfers (system `transfer`);
+  - income: Salary, Freelance, Gift, Interest, Refund, Sale, Bonus, Other (system `other`).
+- A user has one `other` category per kind and one `transfer` category (expense). System categories can be renamed and recoloured, but their kind is locked and they cannot be deleted (`id: ["validation.systemCategory"]`). Transactions cannot use the `transfer` category (`categoryId: ["validation.unknownCategory"]`).
+- `name` is 1 to 40 characters after trimming and is stored trimmed. It is unique per user and kind, case-insensitively (`validation.categoryNameTaken`). `color` is one of `chart-1` to `chart-6`.
+- `inUse` is true when the category has at least one transaction.
+- `PUT` replaces `name`, `kind` and `color`. The kind of a category that is in use cannot change (`kind: ["validation.categoryKindLocked"]`), nor can the kind of a system category.
+- `DELETE` of a category that is in use moves its transactions to the `other` category of the same kind, then deletes it. Deleting a missing id answers 404.
+
+### Transactions
+
+- `GET /v1/transactions`: `pageSize` defaults to 20 (maximum 100). The answer is a `TransactionPage`: the usual `Page` fields plus `sum` and `currency`.
+- Filters, all optional and combined with AND: `kind`, `categoryId`, `accountId`, `from` and `to` (both inclusive, `YYYY-MM-DD`) and `search`. An unknown `kind` or `sort`, a `from` or `to` that is not a real date, or a `categoryId` or `accountId` that is not a GUID answers 400 with `validation.invalidValue` under the parameter name. `from` later than `to` is not an error and gives an empty page. The server does not know financial periods: the client turns a period into `from` and `to`.
+- `search` is trimmed and compared case-insensitively as literal text, so `%`, `_` and `\` are plain characters. A transaction matches when its `title`, its `note` or the name of its category contains the text. When the text also looks like an amount (digits, optionally followed by `.` or `,` and up to two digits), a transaction matches too when its entered `amount` written as `units.cc` starts with it, reading a comma as a dot. For example `12,5` matches 1250 (`12.50`) and 12500 (`125.00`) does not. An empty search is ignored.
+- `sort` is one of `-date` (default), `date`, `-amount` and `amount`. `-date` is newest first: `date`, then creation time, then `id`, all descending. `date` is the same order reversed. `amount` sorts by `baseAmount` (not by the entered amount), ascending for `amount` and descending for `-amount`, and ties fall back to the `-date` order. Editing a transaction keeps its creation time.
+- `sum` is the signed total in the base currency over every transaction that matches the filters, not only the page: `+baseAmount` for income and `-baseAmount` for expense. It is 0 for an empty result. `currency` is the base currency the `sum` and every `baseAmount` are in.
+- `POST` and `PUT` take the account, the category and the entered `amount` and `currency`. The server stores `rate`, `accountAmount` and `baseAmount` with the transaction:
+  - `rate` is 1 when `currency` equals the account currency (a sent `rate` is still validated, then ignored). Otherwise it is the manual `rate` rounded to 6 decimals when sent, and the exchange rate of the transaction `date` when not.
+  - `accountAmount` is `amount` times `rate`, rounded half away from zero to a whole minor unit.
+  - `baseAmount` is `amount` when `currency` is the base currency. Otherwise it is `accountAmount` converted from the account currency into the base currency at the exchange rate of the `date`, rounded the same way.
+  - A converted `accountAmount` that rounds to 0 answers `rate: ["validation.positiveAmount"]`, and one above 100000000000 answers `rate: ["validation.invalidValue"]`.
+  - A manual `rate` must be a JSON number with `0 < rate <= 1000000`.
+  - A rate that is needed but not stored answers 503 `rates.unavailable`.
+- `title` is optional, stored trimmed, and is `""` when missing or blank. `note` is stored trimmed and is `null` when missing or blank. The limits are 100 and 200 characters after trimming (`validation.titleTooLong`, `validation.noteTooLong`).
+- `categoryId` must be a category of the user that is not the `transfer` category, and its kind must equal the transaction `kind` (`validation.categoryKindMismatch`). `accountId` must be an account of the user and not archived, except that `PUT` may keep the account the transaction already has even when it was archived since.
+- A stored transaction never changes when exchange rates change later. Only a change of the base currency rewrites `baseAmount`: `PUT /v1/settings` with a new `baseCurrency` recomputes `baseAmount` of every transaction of the user at the exchange rate of its own date, exactly as a new transaction would be priced, and the `sum`, the `amount` sort and every `baseAmount` are then in the new currency. If a currency used by the transactions has no stored rate at all, the answer is 503 `rates.unavailable` and nothing changes.
+- `GET /v1/transactions/{id}` answers 404 for an unknown or foreign id. `POST` answers 201 with `Location: /v1/transactions/{id}`, `PUT` 200 and `DELETE` 204.
+- Transactions change `balance` and `inUse` of the account and `inUse` of the category. Deleting a transaction restores the balance.
