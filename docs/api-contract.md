@@ -540,7 +540,7 @@ Validation runs before the lookup. An invalid body sent to an unknown account id
 - `date`, `from` and `to` are all optional. An omitted `date` means today's UTC date, and every `Rate` echoes the requested or resolved date in `date`. Without `from` and `to` every currency pair is returned, never a pair with `from == to`.
 - For a date, the rate of each currency is the latest stored one on or before that date. For weekends, holidays and future dates that is the latest earlier rate, and for a date before the history start it is the earliest stored rate. Cross rates go through PLN and are rounded to 6 decimals.
 - Pairs whose currencies have no stored rate are omitted, so the array can be empty right after the first start.
-- The response is cached for up to an hour and is the same for every user.
+- Today's rates are cached for up to an hour, are the same for every user, and the sync invalidates them; any other date is read from the database on every request.
 
 ## Categories and transactions
 

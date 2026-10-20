@@ -13,8 +13,8 @@ public static class GetRatesEndpoint
                 "/rates",
                 async (string? date, string? from, string? to, TimeProvider time, IMediator mediator, CancellationToken ct) =>
                 {
-                    var effectiveDate = date ?? IsoDate.ToWire(DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime));
-                    return (await mediator.Send(new GetRatesQuery(effectiveDate, from, to), ct))
+                    var today = IsoDate.ToWire(DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime));
+                    return (await mediator.Send(new GetRatesQuery(date ?? today, from, to, today), ct))
                         .ToHttp(rates => Results.Ok(rates));
                 })
             .RequireAuthorization(AuthExtensions.UserPolicy);
