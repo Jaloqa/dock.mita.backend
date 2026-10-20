@@ -37,9 +37,51 @@ public sealed class ForwardedHeadersTests(MitaApiFactory factory) : IClassFixtur
         (await LoginStatusesAsync(app, "203.0.113.2", 1)).ShouldBe([HttpStatusCode.TooManyRequests]);
     }
 
-    private WebApplicationFactory<Program> Limited(string remoteIp, string key, string value) =>
+    [Fact]
+    public async Task Should_LimitEachClientSeparately_When_TwoTrustedHopsAndForwardLimitIsTwo()
+    {
+        await using var app = Limited(
+            Proxy,
+            "ForwardedHeaders:KnownNetworks:0",
+            "10.0.0.0/24",
+            new KeyValuePair<string, string?>("ForwardedHeaders:ForwardLimit", "2"));
+
+        (await LoginStatusesAsync(app, "203.0.113.1, 10.0.0.9", 3)).ShouldBe(
+            [HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.TooManyRequests]);
+        (await LoginStatusesAsync(app, "203.0.113.2, 10.0.0.9", 1)).ShouldBe([HttpStatusCode.Unauthorized]);
+    }
+
+    [Fact]
+    public async Task Should_UseLastHopOnly_When_ForwardLimitIsDefault()
+    {
+        await using var app = Limited(Proxy, "ForwardedHeaders:KnownNetworks:0", "10.0.0.0/24");
+
+        (await LoginStatusesAsync(app, "203.0.113.1, 10.0.0.9", 2)).ShouldBe(
+            [HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized]);
+        (await LoginStatusesAsync(app, "203.0.113.2, 10.0.0.9", 1)).ShouldBe([HttpStatusCode.TooManyRequests]);
+    }
+
+    [Fact]
+    public async Task Should_IgnoreSpoofedEntry_When_ForwardLimitIsDefault()
+    {
+        await using var app = Limited(Proxy, "ForwardedHeaders:KnownNetworks:0", "10.0.0.0/24");
+
+        (await LoginStatusesAsync(app, "198.51.100.1, 203.0.113.1", 2)).ShouldBe(
+            [HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized]);
+        (await LoginStatusesAsync(app, "198.51.100.2, 203.0.113.1", 1)).ShouldBe([HttpStatusCode.TooManyRequests]);
+    }
+
+    private WebApplicationFactory<Program> Limited(
+        string remoteIp,
+        string key,
+        string value,
+        params KeyValuePair<string, string?>[] extraSettings) =>
         factory
-            .WithSettings(new Dictionary<string, string?> { ["RateLimiting:AuthPermitLimit"] = "2", [key] = value })
+            .WithSettings(new Dictionary<string, string?>(extraSettings)
+            {
+                ["RateLimiting:AuthPermitLimit"] = "2",
+                [key] = value,
+            })
             .WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
                 services.AddSingleton<IStartupFilter>(new RemoteIpStartupFilter(IPAddress.Parse(remoteIp)))));
 
