@@ -9,4 +9,6 @@ public interface ICachedQuery
     TimeSpan? CacheExpiration { get; }
 
     bool IsUserScoped => true;
+
+    bool IsCacheable => true;
 }

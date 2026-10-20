@@ -20,6 +20,11 @@ public sealed partial class CachingBehavior<TRequest, TResponse>(
         RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
+        if (!request.IsCacheable)
+        {
+            return await next(cancellationToken);
+        }
+
         string key;
         string[] tags;
         if (request.IsUserScoped)
