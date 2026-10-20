@@ -9,6 +9,8 @@ services:
       - .env
     environment:
       Database__ApplyMigrationsOnStartup: "true"
+      ForwardedHeaders__KnownNetworks__0: 172.16.0.0/12
+      ForwardedHeaders__KnownNetworks__1: 192.168.0.0/16
     depends_on:
       postgres:
         condition: service_healthy

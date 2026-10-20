@@ -18,6 +18,7 @@ public static class ForwardedHeadersExtensions
             .Configure<IOptions<TrustedProxiesOptions>>((forwarded, trusted) =>
             {
                 forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+                forwarded.ForwardLimit = trusted.Value.ForwardLimit;
 
                 var proxies = trusted.Value.KnownProxies;
                 var networks = trusted.Value.KnownNetworks;
