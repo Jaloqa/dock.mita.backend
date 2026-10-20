@@ -28,6 +28,6 @@ public sealed class GetRatesValidatorTests
     public void Should_BeValid_When_ValuesAreWellFormed() => Errors("2026-02-28", "EUR", "UAH").ShouldBeEmpty();
 
     private static (string, string)[] Errors(string date, string? from, string? to) =>
-        [.. new GetRatesValidator().Validate(new GetRatesQuery(date, from, to)).Errors
+        [.. new GetRatesValidator().Validate(new GetRatesQuery(date, from, to, "2026-03-02")).Errors
             .Select(error => (error.PropertyName, error.ErrorCode))];
 }

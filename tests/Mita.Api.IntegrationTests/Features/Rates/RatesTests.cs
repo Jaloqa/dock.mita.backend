@@ -124,6 +124,35 @@ public sealed class RatesTests(MitaApiFactory factory) : IClassFixture<MitaApiFa
     }
 
     [Fact]
+    public async Task Should_ReadStoredRows_When_PastDateRequestedAgain()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.EUR, "2026-03-02", 4.10m));
+
+        var first = await GetAsync(isolated, "date=2026-03-04&from=EUR&to=PLN");
+        await TestData.AddRatesAsync(isolated, (Currency.EUR, "2026-03-03", 4.27m));
+        var second = await GetAsync(isolated, "date=2026-03-04&from=EUR&to=PLN");
+
+        first.Single().Value.ShouldBe(4.10);
+        second.Single().Value.ShouldBe(4.27);
+    }
+
+    [Fact]
+    public async Task Should_KeepTodaysRatesCached_When_RowsAddedWithoutSync()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await TestData.AddRatesAsync(isolated, (Currency.EUR, IsoDate.ToWire(today.AddDays(-1)), 4.0m));
+
+        var first = await GetAsync(isolated, "from=EUR&to=PLN");
+        await TestData.AddRatesAsync(isolated, (Currency.EUR, IsoDate.ToWire(today), 4.5m));
+        var second = await GetAsync(isolated, "from=EUR&to=PLN");
+
+        first.Single().Value.ShouldBe(4.0);
+        second.Single().Value.ShouldBe(4.0);
+    }
+
+    [Fact]
     public async Task Should_Return400_When_QueryValueIsInvalid()
     {
         await using var isolated = factory.WithIsolatedData();
