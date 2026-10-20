@@ -10,6 +10,8 @@ public sealed class TrustedProxiesOptions
     public string[] KnownProxies { get; set; } = [];
 
     public string[] KnownNetworks { get; set; } = [];
+
+    public int ForwardLimit { get; set; } = 1;
 }
 
 public sealed class TrustedProxiesOptionsValidator : IValidateOptions<TrustedProxiesOptions>
@@ -30,6 +32,12 @@ public sealed class TrustedProxiesOptionsValidator : IValidateOptions<TrustedPro
         {
             failures.Add(
                 $"{TrustedProxiesOptions.SectionName}:{nameof(TrustedProxiesOptions.KnownNetworks)} contains invalid CIDR networks: {string.Join(", ", invalidNetworks)}.");
+        }
+
+        if (options.ForwardLimit is < 1 or > 10)
+        {
+            failures.Add(
+                $"{TrustedProxiesOptions.SectionName}:{nameof(TrustedProxiesOptions.ForwardLimit)} must be between 1 and 10.");
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);

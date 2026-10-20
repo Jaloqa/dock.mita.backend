@@ -46,8 +46,15 @@ Configuration comes from `appsettings.json`, environment variables and user secr
 | `Rates:NbpBaseUrl` | NBP API base URL, absolute https | `https://api.nbp.pl/api/` |
 | `ForwardedHeaders:KnownProxies` | IP addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` are trusted | empty, which keeps the ASP.NET Core loopback-only default |
 | `ForwardedHeaders:KnownNetworks` | CIDR networks of trusted reverse proxies | empty, as above |
+| `ForwardedHeaders:ForwardLimit` | maximum forwarded hops walked back, each through a trusted proxy, 1 to 10; set 2 when an ingress sits in front of the frontend's proxy | `1` |
 
 Behind an ingress or any other reverse proxy, set `ForwardedHeaders__KnownNetworks__0` (for example `10.0.0.0/8`, the pod network of the cluster) or `ForwardedHeaders__KnownProxies__0`. Without it the forwarded headers are ignored: every request appears to come from the proxy address, so the rate limit counts all clients together, and the scheme stays `http`, which breaks the Secure cookie handling.
+
+The frontend's Nitro proxy appends the client address to `X-Forwarded-For`, so with `ForwardLimit` 1 only that last entry is used and a client going through the proxy cannot pick its own rate-limit bucket by sending the header. The compose stack trusts Docker's private networks (`172.16.0.0/12` and `192.168.0.0/16`) for local use only: port 8080 is published and direct callers come from those ranges, so a client reaching port 8080 directly can set its own address and pick its bucket. Behind ingress -> frontend proxy -> API set `ForwardedHeaders__ForwardLimit=2` and trust the networks of both the ingress and the frontend pods (the pod network, plus the node addresses for a host-network ingress controller).
+
+## Run with the frontend
+
+Start this stack as described in "Run locally", then in `dock.mita.frontend` run `docker compose up --build` and open `http://localhost:3000`. The frontend proxies `/v1` to `host.docker.internal:8080`.
 
 ## Commands
 

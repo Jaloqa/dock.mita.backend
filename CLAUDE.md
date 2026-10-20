@@ -107,7 +107,8 @@ dotnet test --logger junit
 dotnet run --project src/Mita.Api
 dotnet ef migrations add <Name> --project src/Mita.Infrastructure --startup-project src/Mita.Api
 dotnet ef database update --project src/Mita.Infrastructure --startup-project src/Mita.Api
-docker compose up -d
+cp .env.example .env
+docker compose up -d --build
 ```
 
 ## Testing
