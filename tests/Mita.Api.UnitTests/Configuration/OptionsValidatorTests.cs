@@ -82,6 +82,23 @@ public sealed class OptionsValidatorTests
             .Succeeded.ShouldBe(valid);
 
     [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(10, true)]
+    [InlineData(11, false)]
+    public void Should_RequireForwardLimitInRange_When_ValidatingTrustedProxiesOptions(int limit, bool valid)
+    {
+        var result = new TrustedProxiesOptionsValidator()
+            .Validate(null, new TrustedProxiesOptions { ForwardLimit = limit });
+
+        result.Succeeded.ShouldBe(valid);
+        if (!valid)
+        {
+            result.FailureMessage!.ShouldContain("ForwardedHeaders:ForwardLimit");
+        }
+    }
+
+    [Theory]
     [InlineData("http://localhost:3000", true)]
     [InlineData("https://app.example.com", true)]
     [InlineData("https://app.example.com/", false)]
