@@ -120,6 +120,26 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
     }
 
     [Fact]
+    public async Task Should_DescribeTags()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/tags", out var tags).ShouldBeTrue();
+        paths.TryGetProperty("/v1/tags/{id}", out var tag).ShouldBeTrue();
+        paths.TryGetProperty("/v1/transactions", out var transactions).ShouldBeTrue();
+
+        TagOf(tags.GetProperty("get")).ShouldBe("Tags");
+        TagOf(tag.GetProperty("put")).ShouldBe("Tags");
+        TagOf(tag.GetProperty("delete")).ShouldBe("Tags");
+        ParameterNames(transactions.GetProperty("get")).ShouldContain("tagIds");
+    }
+
+    [Fact]
     public async Task Should_DescribeBudgetsAndGoals()
     {
         using var client = factory.CreateClient();
