@@ -5,6 +5,7 @@ using Mita.Domain.Budgets;
 using Mita.Domain.Categories;
 using Mita.Domain.Goals;
 using Mita.Domain.Money;
+using Mita.Domain.Tags;
 using Mita.Domain.Transactions;
 using Mita.Domain.Users;
 using Mita.Infrastructure.Authentication;
@@ -36,6 +37,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     public DbSet<Goal> Goals => Set<Goal>();
 
     public DbSet<GoalContribution> GoalContributions => Set<GoalContribution>();
+
+    public DbSet<Tag> Tags => Set<Tag>();
+
+    public DbSet<TransactionTag> TransactionTags => Set<TransactionTag>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

@@ -36,7 +36,7 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
             SELECT table_name FROM information_schema.tables
             WHERE table_schema = 'public' AND table_name IN ('AspNetUsers', 'user_settings', 'refresh_tokens',
                 'accounts', 'transfers', 'exchange_rates', 'account_movements', 'categories', 'transactions',
-                'budgets', 'goals', 'goal_contributions')
+                'budgets', 'goals', 'goal_contributions', 'tags', 'transaction_tags')
             """,
             connection);
         var tables = new List<string>();
@@ -51,7 +51,8 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
         tables.ShouldBe(
             [
                 "AspNetUsers", "refresh_tokens", "user_settings", "accounts", "transfers", "exchange_rates",
-                "account_movements", "categories", "transactions", "budgets", "goals", "goal_contributions"
+                "account_movements", "categories", "transactions", "budgets", "goals", "goal_contributions", "tags",
+                "transaction_tags"
             ],
             ignoreOrder: true);
 
@@ -59,6 +60,11 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
             "SELECT count(*) FROM pg_proc WHERE proname = 'pln_value'",
             connection);
         ((long)(await function.ExecuteScalarAsync(ct))!).ShouldBe(1);
+
+        await using var index = new NpgsqlCommand(
+            "SELECT count(*) FROM pg_indexes WHERE indexname = 'IX_tags_user_name'",
+            connection);
+        ((long)(await index.ExecuteScalarAsync(ct))!).ShouldBe(1);
     }
 
     [Fact]

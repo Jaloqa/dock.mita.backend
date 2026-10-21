@@ -8,6 +8,7 @@ using Mita.Domain.Categories;
 using Mita.Domain.Goals;
 using Mita.Domain.Money;
 using Mita.Domain.Periods;
+using Mita.Domain.Tags;
 using Mita.Domain.Transactions;
 using Mita.Infrastructure.Persistence;
 
@@ -101,6 +102,28 @@ public static class TestData
         db.Transactions.Add(transaction);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return transaction;
+    }
+
+    public static async Task<Tag> AddTagAsync(WebApplicationFactory<Program> factory, Guid userId, string name)
+    {
+        var tag = Tag.Create(userId, name);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Tags.Add(tag);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return tag;
+    }
+
+    public static async Task TagTransactionAsync(
+        WebApplicationFactory<Program> factory,
+        Transaction transaction,
+        params Tag[] tags)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.TransactionTags.AddRange(tags.Select(tag => TransactionTag.Create(transaction.Id, tag.Id)));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     public static async Task<Budget> AddBudgetAsync(

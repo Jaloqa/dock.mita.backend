@@ -1,6 +1,7 @@
 using Mita.Domain.Categories;
 using Mita.Domain.Common;
 using Mita.Domain.Money;
+using Mita.Domain.Tags;
 
 namespace Mita.Domain.Transactions;
 
@@ -9,6 +10,8 @@ public sealed class Transaction : IAuditable
     public const int TitleMaxLength = 100;
 
     public const int NoteMaxLength = 200;
+
+    private readonly List<TransactionTag> tags = [];
 
     private Transaction()
     {
@@ -39,6 +42,8 @@ public sealed class Transaction : IAuditable
     public long AccountAmount { get; private set; }
 
     public long BaseAmount { get; private set; }
+
+    public IReadOnlyCollection<TransactionTag> Tags => tags;
 
     public DateTimeOffset CreatedAt { get; set; }
 
