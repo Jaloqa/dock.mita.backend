@@ -21,7 +21,8 @@ public static class CreateTransactionEndpoint
                         request?.AccountId,
                         request?.Amount,
                         request?.Currency,
-                        request?.Rate);
+                        request?.Rate,
+                        request?.Tags);
 
                     return (await mediator.Send(command, ct))
                         .ToHttp(transaction => Results.Created($"/v1/transactions/{transaction.Id}", transaction));

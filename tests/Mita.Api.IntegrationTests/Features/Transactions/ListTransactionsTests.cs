@@ -48,7 +48,7 @@ public sealed class ListTransactionsTests(MitaApiFactory factory) : IClassFixtur
         var item = page.GetProperty("items").EnumerateArray().Single();
         item.GetProperty("id").GetGuid().ShouldBe(created);
         item.EnumerateObject().Select(property => property.Name).ShouldBe(
-            ["id", "kind", "date", "title", "note", "categoryId", "accountId", "amount", "currency", "accountAmount", "rate", "baseAmount"],
+            ["id", "kind", "date", "title", "note", "categoryId", "accountId", "amount", "currency", "accountAmount", "rate", "baseAmount", "tags"],
             ignoreOrder: true);
         item.GetProperty("title").GetString().ShouldBe("Bread");
         item.GetProperty("date").GetString().ShouldBe(DefaultDate);

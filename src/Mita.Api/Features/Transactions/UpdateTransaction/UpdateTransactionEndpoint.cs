@@ -22,7 +22,8 @@ public static class UpdateTransactionEndpoint
                         request?.AccountId,
                         request?.Amount,
                         request?.Currency,
-                        request?.Rate);
+                        request?.Rate,
+                        request?.Tags);
 
                     return (await mediator.Send(command, ct)).ToHttp(transaction => Results.Ok(transaction));
                 })

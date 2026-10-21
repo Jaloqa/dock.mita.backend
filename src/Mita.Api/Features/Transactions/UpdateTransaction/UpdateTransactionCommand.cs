@@ -17,7 +17,8 @@ public sealed record UpdateTransactionRequest(
     JsonElement? AccountId,
     JsonElement? Amount,
     JsonElement? Currency,
-    JsonElement? Rate);
+    JsonElement? Rate,
+    JsonElement? Tags);
 
 public sealed record UpdateTransactionCommand(
     Guid Id,
@@ -29,7 +30,8 @@ public sealed record UpdateTransactionCommand(
     JsonElement? AccountId,
     JsonElement? Amount,
     JsonElement? Currency,
-    JsonElement? Rate) : IRequest<Result<TransactionDto>>, ITransactionInput, IInvalidatesCache
+    JsonElement? Rate,
+    JsonElement? Tags) : IRequest<Result<TransactionDto>>, ITransactionInput, IInvalidatesCache
 {
     public Guid? ExistingId => Id;
 

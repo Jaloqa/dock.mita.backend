@@ -50,7 +50,10 @@ public sealed class CreateTransactionValidatorTests
         { "rate", "-1", "validation.invalidValue" },
         { "rate", "\"4\"", "validation.invalidValue" },
         { "rate", "1000001", "validation.invalidValue" },
-        { "rate", "true", "validation.invalidValue" }
+        { "rate", "true", "validation.invalidValue" },
+        { "tags", "\"a\"", "validation.invalidValue" },
+        { "tags", "[\"" + new string('a', 31) + "\"]", "validation.tagTooLong" },
+        { "tags", "[\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"11\"]", "validation.tooManyTags" }
     };
 
     public static TheoryData<string, string> ValidFields => new()
@@ -68,7 +71,9 @@ public sealed class CreateTransactionValidatorTests
         { "currency", "\"PLN\"" },
         { "rate", "1e-9" },
         { "rate", "1000000" },
-        { "rate", "null" }
+        { "rate", "null" },
+        { "tags", "null" },
+        { "tags", "[]" }
     };
 
     [Fact]
@@ -76,7 +81,7 @@ public sealed class CreateTransactionValidatorTests
 
     [Fact]
     public void Should_Pass_When_OptionalFieldsAbsent() =>
-        Errors(Without(Without(Without(Valid, "rate"), "note"), "title")).ShouldBeEmpty();
+        Errors(Without(Without(Without(Without(Valid, "rate"), "note"), "title"), "tags")).ShouldBeEmpty();
 
     [Theory]
     [MemberData(nameof(InvalidFields))]
@@ -126,7 +131,8 @@ public sealed class CreateTransactionValidatorTests
             request.AccountId,
             request.Amount,
             request.Currency,
-            request.Rate);
+            request.Rate,
+            request.Tags);
         var validator = new CreateTransactionValidator(new FixedTimeProvider(Now));
         return [.. validator.Validate(command).Errors.Select(error => (error.PropertyName, error.ErrorCode))];
     }

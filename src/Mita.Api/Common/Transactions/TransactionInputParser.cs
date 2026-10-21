@@ -1,6 +1,7 @@
 using Mita.Api.Common.Categories;
 using Mita.Api.Common.Money;
 using Mita.Api.Common.Rates;
+using Mita.Api.Common.Tags;
 using Mita.Api.Common.Wire;
 using Mita.Domain.Categories;
 using Mita.Domain.Money;
@@ -16,7 +17,8 @@ public sealed record ParsedTransaction(
     Guid AccountId,
     long Amount,
     Currency Currency,
-    decimal? ManualRate);
+    decimal? ManualRate,
+    IReadOnlyList<string> Tags);
 
 public static class TransactionInputParser
 {
@@ -35,6 +37,6 @@ public static class TransactionInputParser
         }
 
         decimal? manualRate = ManualRate.TryParse(input.Rate, out var rate) ? rate : null;
-        return new ParsedTransaction(kind, date, title ?? string.Empty, note, categoryId, accountId, amount, currency, manualRate);
+        return new ParsedTransaction(kind, date, title ?? string.Empty, note, categoryId, accountId, amount, currency, manualRate, TagNames.Parse(input.Tags));
     }
 }
