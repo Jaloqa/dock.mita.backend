@@ -1,4 +1,4 @@
-# API contract: authentication, users, settings, accounts, transfers, rates, categories, transactions, budgets, goals, overview and reports
+# API contract: authentication, users, settings, accounts, transfers, rates, categories, transactions, tags, budgets, goals, overview and reports
 
 This document describes the HTTP contract of API version 1 for the frontend switch-over from mocks to the real backend. The OpenAPI document is served at `/openapi/v1.json`, and Scalar at `/scalar` in the Development environment.
 
@@ -28,11 +28,14 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | POST | `/v1/categories` | required | `CategoryInput` | 201 `Category`, `Location` header | 400, 401, 403 |
 | PUT | `/v1/categories/{id}` | required | `CategoryInput` | 200 `Category` | 400, 401, 403, 404 |
 | DELETE | `/v1/categories/{id}` | required | none | 204 | 400, 401, 403, 404, 503 |
-| GET | `/v1/transactions?search&categoryId&accountId&kind&from&to&sort&page&pageSize` | required | none | 200 `TransactionPage` | 400, 401 |
+| GET | `/v1/transactions?search&categoryId&accountId&tagIds&kind&from&to&sort&page&pageSize` | required | none | 200 `TransactionPage` | 400, 401 |
 | GET | `/v1/transactions/{id}` | required | none | 200 `Transaction` | 401, 404 |
 | POST | `/v1/transactions` | required | `TransactionInput` | 201 `Transaction`, `Location` header | 400, 401, 403, 503 |
 | PUT | `/v1/transactions/{id}` | required | `TransactionInput` | 200 `Transaction` | 400, 401, 403, 404, 503 |
 | DELETE | `/v1/transactions/{id}` | required | none | 204 | 401, 403, 404 |
+| GET | `/v1/tags?search&page&pageSize` | required | none | 200 `Page<Tag>` | 400, 401 |
+| PUT | `/v1/tags/{id}` | required | `TagInput` | 200 `Tag` | 400, 401, 403, 404 |
+| DELETE | `/v1/tags/{id}` | required | none | 204 | 401, 403, 404 |
 | GET | `/v1/budgets?period&page&pageSize` | required | none | 200 `BudgetPage` | 400, 401, 503 |
 | POST | `/v1/budgets` | required | `BudgetInput` | 201 `Budget`, `Location` header | 400, 401, 403, 503 |
 | PUT | `/v1/budgets/{id}` | required | `BudgetInput` | 200 `Budget` | 400, 401, 403, 404, 503 |
@@ -163,6 +166,12 @@ type Transaction = {
   accountAmount: number;  // minor units of the account currency
   rate: number;           // entered currency to account currency, 1 for the same currency
   baseAmount: number;     // minor units of the current base currency
+  tags: TransactionTag[]; // ordered by lower-case name, then id; [] when none
+};
+
+type TransactionTag = {
+  id: string;             // GUID
+  name: string;
 };
 
 type TransactionInput = {
@@ -175,6 +184,17 @@ type TransactionInput = {
   amount: number;         // integer minor units, 1 to 100000000000
   currency: Currency;     // any supported currency, converted into the account currency
   rate?: number;          // manual rate, 0 < rate <= 1000000; not used for the same currency, but still validated
+  tags?: string[];        // tag names, each 1 to 30 characters after trimming with no control characters, at most 10 distinct; missing or null means no tags
+};
+
+type Tag = {
+  id: string;             // GUID
+  name: string;
+  usage: number;          // the number of the user's transactions with the tag
+};
+
+type TagInput = {
+  name: string;           // 1 to 30 characters after trimming, no control characters, unique per user
 };
 
 type TransactionPage = Page<Transaction> & {
@@ -452,14 +472,14 @@ Every error is an RFC 9457 `application/problem+json` document:
 
 | Code | Meaning |
 | --- | --- |
-| `validation.required` | the field is missing, null or blank. Goal `deadline` and `accountId` and contribution `rate` are optional, and `fromAccountId` is required only for a linked goal |
+| `validation.required` | the field is missing, null or blank, including the `name` of `PUT /v1/tags/{id}`. Goal `deadline` and `accountId` and contribution `rate` are optional, and `fromAccountId` is required only for a linked goal |
 | `validation.invalidEmail` | the email is not a valid address. On login it is returned only when the email contains a control character |
 | `validation.emailTaken` | register, or `PUT /v1/me`: another account uses this email |
 | `validation.nameTooLong` | the name is longer than 40 characters after trimming (users, accounts, categories and goals) |
 | `validation.passwordTooShort` | register: fewer than 10 characters |
 | `validation.passwordTooLong` | register: more than 128 characters |
 | `validation.invalidPassword` | `DELETE /v1/me`: the password is wrong, or the account is locked after repeated failures (field `password`) |
-| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value, a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 (reported under `rate`). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `date`, `from`, `to`, `kind`, `sort`, budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive) or report `range` (anything but `3m`, `6m` or `12m`) |
+| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value, a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 (reported under `rate`). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers, and for `tags` a value that is not an array, an element that is not a string, and an element that is blank or contains a control character (checked before `tagTooLong` and `tooManyTags`). On tags it covers a `name` that is not a string or contains a control character. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `tagIds`, `date`, `from`, `to`, `kind`, `sort`, budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive) or report `range` (anything but `3m`, `6m` or `12m`) |
 | `validation.currencyLocked` | `PUT /v1/accounts/{id}`: the currency of an account that is in use cannot change (field `currency`) |
 | `validation.cardLast4` | `cardLast4` is present, not blank and not exactly 4 digits. Checked for every account type |
 | `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers or transactions, so it can only be archived (field `id`) |
@@ -475,6 +495,9 @@ Every error is an RFC 9457 `application/problem+json` document:
 | `validation.categoryKindMismatch` | transaction `categoryId` has a different kind than the transaction `kind`. Checked only when `kind` itself is valid |
 | `validation.titleTooLong` | transaction `title` is longer than 100 characters after trimming |
 | `validation.noteTooLong` | transaction `note` is longer than 200 characters after trimming (transfers report this as `validation.invalidValue`) |
+| `validation.tagTooLong` | a transaction tag, or the `name` of `PUT /v1/tags/{id}`, is longer than 30 characters after trimming (field `tags` or `name`) |
+| `validation.tooManyTags` | transaction `tags` holds more than 10 distinct names, compared case-insensitively (field `tags`) |
+| `validation.tagNameTaken` | `PUT /v1/tags/{id}`: another tag of the user has this name, compared case-insensitively after trimming (field `name`) |
 | `validation.expenseCategoryOnly` | `POST`/`PUT /v1/budgets`: `categoryId` is an income category (field `categoryId`) |
 | `validation.budgetExists` | `POST`/`PUT /v1/budgets`: the category already has a budget in this period. Also returned when another request created it at the same moment. Checked only when `period` is valid (field `categoryId`) |
 | `validation.nothingToCopy` | `POST /v1/budgets/copy`: the previous period has no budget to copy, or every category of it already has a budget in the target period (field `period`) |
@@ -561,8 +584,8 @@ Every category and transaction belongs to the current user, and an id of another
 ### Transactions
 
 - `GET /v1/transactions`: `pageSize` defaults to 20 (maximum 100). The answer is a `TransactionPage`: the usual `Page` fields plus `sum` and `currency`.
-- Filters, all optional and combined with AND: `kind`, `categoryId`, `accountId`, `from` and `to` (both inclusive, `YYYY-MM-DD`) and `search`. An unknown `kind` or `sort`, a `from` or `to` that is not a real date, or a `categoryId` or `accountId` that is not a GUID answers 400 with `validation.invalidValue` under the parameter name. `from` later than `to` is not an error and gives an empty page. The server does not know financial periods: the client turns a period into `from` and `to`.
-- `search` is trimmed and compared case-insensitively as literal text, so `%`, `_` and `\` are plain characters. A transaction matches when its `title`, its `note` or the name of its category contains the text. When the text also looks like an amount (digits, optionally followed by `.` or `,` and up to two digits), a transaction matches too when its entered `amount` written as `units.cc` starts with it, reading a comma as a dot. For example `12,5` matches 1250 (`12.50`) and 12500 (`125.00`) does not. An empty search is ignored.
+- Filters, all optional and combined with AND: `kind`, `categoryId`, `accountId`, `tagIds`, `from` and `to` (both inclusive, `YYYY-MM-DD`) and `search`. An unknown `kind` or `sort`, a `from` or `to` that is not a real date, or a `categoryId` or `accountId` that is not a GUID answers 400 with `validation.invalidValue` under the parameter name. `tagIds` is a comma-separated list of at most 10 tag ids (see Tags), and a list with a non-GUID element or with more than 10 elements answers `tagIds: ["validation.invalidValue"]`. `from` later than `to` is not an error and gives an empty page. The server does not know financial periods: the client turns a period into `from` and `to`.
+- `search` is trimmed and compared case-insensitively as literal text, so `%`, `_` and `\` are plain characters. A transaction matches when its `title`, its `note`, the name of its category or the name of one of its tags contains the text. When the text also looks like an amount (digits, optionally followed by `.` or `,` and up to two digits), a transaction matches too when its entered `amount` written as `units.cc` starts with it, reading a comma as a dot. For example `12,5` matches 1250 (`12.50`) and 12500 (`125.00`) does not. An empty search is ignored.
 - `sort` is one of `-date` (default), `date`, `-amount` and `amount`. `-date` is newest first: `date`, then creation time, then `id`, all descending. `date` is the same order reversed. `amount` sorts by `baseAmount` (not by the entered amount), ascending for `amount` and descending for `-amount`, and ties fall back to the `-date` order. Editing a transaction keeps its creation time.
 - `sum` is the signed total in the base currency over every transaction that matches the filters, not only the page: `+baseAmount` for income and `-baseAmount` for expense. It is 0 for an empty result. `currency` is the base currency the `sum` and every `baseAmount` are in.
 - `POST` and `PUT` take the account, the category and the entered `amount` and `currency`. The server stores `rate`, `accountAmount` and `baseAmount` with the transaction:
@@ -572,11 +595,29 @@ Every category and transaction belongs to the current user, and an id of another
   - A converted `accountAmount` that rounds to 0 answers `rate: ["validation.positiveAmount"]`, and one above 100000000000 answers `rate: ["validation.invalidValue"]`.
   - A manual `rate` must be a JSON number with `0 < rate <= 1000000`.
   - A rate that is needed but not stored answers 503 `rates.unavailable`.
+- `tags` is optional and takes tag names (see Tags). `PUT` replaces the whole set, as it does for `title`, so a `PUT` without `tags` removes the tags of the transaction.
 - `title` is optional, stored trimmed, and is `""` when missing or blank. `note` is stored trimmed and is `null` when missing or blank. The limits are 100 and 200 characters after trimming (`validation.titleTooLong`, `validation.noteTooLong`).
 - `categoryId` must be a category of the user that is not the `transfer` category, and its kind must equal the transaction `kind` (`validation.categoryKindMismatch`). `accountId` must be an account of the user and not archived, except that `PUT` may keep the account the transaction already has even when it was archived since.
 - A stored transaction never changes when exchange rates change later. Only a change of the base currency rewrites `baseAmount`: `PUT /v1/settings` with a new `baseCurrency` recomputes `baseAmount` of every transaction of the user at the exchange rate of its own date, exactly as a new transaction would be priced, and the `sum`, the `amount` sort and every `baseAmount` are then in the new currency. If a currency used by the transactions has no stored rate at all, the answer is 503 `rates.unavailable` and nothing changes.
 - `GET /v1/transactions/{id}` answers 404 for an unknown or foreign id. `POST` answers 201 with `Location: /v1/transactions/{id}`, `PUT` 200 and `DELETE` 204.
 - Transactions change `balance` and `inUse` of the account and `inUse` of the category. Deleting a transaction restores the balance.
+
+### Tags
+
+Every tag belongs to the current user, and an id of another user answers exactly like an unknown id (404). There is no endpoint to create a tag: a tag is created by name the first time a transaction is saved with it.
+
+- A tag name is trimmed and has 1 to 30 characters, with no control characters. Spaces inside the name are kept as typed, so `Road  trip` and `Road trip` are two tags.
+- Names are unique per user, case-insensitively. The first spelling the user typed is stored. When a transaction is saved with a name that exists in another case (`GROCERIES-run` for `groceries-run`), the stored tag and its spelling are reused and no second tag is created.
+- A transaction has at most 10 tags. Names that differ only in case count once, and duplicates in one request are merged without an error.
+- `POST` and `PUT /v1/transactions` take `tags` as an array of names, never ids. A missing or `null` `tags` means no tags. On `PUT` the array replaces the previous set, and `[]` or a missing `tags` removes all tags.
+- Every `Transaction` carries `tags`, ordered by lower-case name, then `id`, and `[]` when there are none.
+- `GET /v1/transactions?tagIds=<id>,<id>` keeps the transactions that have any of the listed tags, combined with the other filters by AND. A transaction with several of the listed tags is returned once, and `sum` and `total` count it once. An id that is unknown or belongs to another user matches nothing and is not an error.
+- `search` also matches a transaction when the name of one of its tags contains the text, by the same literal, case-insensitive rule as the category name.
+- `GET /v1/tags`: `pageSize` defaults to 100 (maximum 100). Tags are ordered by lower-case name, then `id`. The optional `search` is trimmed and matched case-insensitively as literal text against the name, so `%`, `_` and `\` are plain characters. `usage` is the number of the user's transactions with the tag, and is 0 for a tag no transaction uses.
+- `PUT /v1/tags/{id}` renames a tag and answers 200 with the `Tag`. When another tag of the user already has the name, compared case-insensitively, the answer is 400 `name: ["validation.tagNameTaken"]`: tags are never merged. Changing only the case of the tag's own name is allowed.
+- `DELETE /v1/tags/{id}` removes the tag from every transaction and answers 204.
+- A tag that no transaction uses any more is kept, with `usage` 0, and is still listed until it is deleted.
+- Tags are not cached.
 
 ## Budgets and goals
 
