@@ -5,7 +5,7 @@ namespace Mita.Api.UnitTests.Features.Transactions;
 
 public sealed class ListTransactionsValidatorTests
 {
-    private static readonly ListTransactionsQuery Valid = new(null, null, null, null, null, null, null, 1, 20);
+    private static readonly ListTransactionsQuery Valid = new(null, null, null, null, null, null, null, null, 1, 20);
 
     public static TheoryData<string, string> InvalidQueries => new()
     {
@@ -15,6 +15,9 @@ public sealed class ListTransactionsValidatorTests
         { "sort=price", "Sort" },
         { "categoryId=abc", "CategoryId" },
         { "accountId=abc", "AccountId" },
+        { "tagIds=abc", "TagIds" },
+        { $"tagIds={Guid.NewGuid()},abc", "TagIds" },
+        { $"tagIds={string.Join(',', Enumerable.Range(0, 11).Select(_ => Guid.NewGuid()))}", "TagIds" },
         { "pageSize=101", "PageSize" },
         { "page=0", "Page" }
     };
@@ -34,6 +37,7 @@ public sealed class ListTransactionsValidatorTests
             Search = "%",
             CategoryId = Guid.NewGuid().ToString(),
             AccountId = Guid.NewGuid().ToString(),
+            TagIds = $"{Guid.NewGuid()}, {Guid.NewGuid()}",
             Kind = "income",
             From = "2026-02-28",
             To = "2026-03-01",
@@ -41,6 +45,17 @@ public sealed class ListTransactionsValidatorTests
             Page = 3,
             PageSize = 100
         }).ShouldBeEmpty();
+
+    [Fact]
+    public void Should_BeValid_When_OneTagId() => Errors(Valid with { TagIds = Guid.NewGuid().ToString() }).ShouldBeEmpty();
+
+    [Fact]
+    public void Should_BeValid_When_TagIdIsDuplicated()
+    {
+        var id = Guid.NewGuid();
+
+        Errors(Valid with { TagIds = $"{id},{id}" }).ShouldBeEmpty();
+    }
 
     [Theory]
     [InlineData("-date")]
@@ -60,6 +75,7 @@ public sealed class ListTransactionsValidatorTests
             "sort" => Valid with { Sort = value },
             "categoryId" => Valid with { CategoryId = value },
             "accountId" => Valid with { AccountId = value },
+            "tagIds" => Valid with { TagIds = value },
             "pageSize" => Valid with { PageSize = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture) },
             "page" => Valid with { Page = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture) },
             _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, null)

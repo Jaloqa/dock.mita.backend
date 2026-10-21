@@ -7,6 +7,7 @@ public sealed record ListTransactionsQuery(
     string? Search,
     string? CategoryId,
     string? AccountId,
+    string? TagIds,
     string? Kind,
     string? From,
     string? To,

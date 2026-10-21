@@ -246,6 +246,76 @@ public sealed class ListTransactionsTests(MitaApiFactory factory) : IClassFixtur
         (await GetPageAsync(owner, string.Empty)).GetProperty("sum").GetInt64().ShouldBe(-100);
     }
 
+    [Fact]
+    public async Task Should_FilterByAnyTag_When_TagIdsGiven()
+    {
+        using var client = new AuthClient(factory);
+        using var other = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+        await other.RegisterNewAsync(Ct);
+        var account = await CreateAccountAsync(client, "PLN");
+        var groceries = await CategoryIdAsync(client, "Groceries", "expense");
+        var otherAccount = await CreateAccountAsync(other, "PLN");
+        var otherGroceries = await CategoryIdAsync(other, "Groceries", "expense");
+        var t1 = await CreateAsync(client, groceries, account, 100, tags: ["trip"]);
+        var t2 = await CreateAsync(client, groceries, account, 100, tags: ["food"]);
+        await CreateAsync(client, groceries, account, 100);
+        await CreateAsync(other, otherGroceries, otherAccount, 100, tags: ["secret"]);
+        var trip = await TagIdAsync(client, "trip");
+        var food = await TagIdAsync(client, "food");
+        var foreign = await TagIdAsync(other, "secret");
+
+        (await IdsAsync(client, $"tagIds={trip}")).ShouldBe([t1]);
+        (await IdsAsync(client, $"tagIds={trip},{food}")).ShouldBe([t2, t1]);
+        (await IdsAsync(client, $"tagIds={trip},{food}&kind=income")).ShouldBeEmpty();
+        var foreignPage = await GetPageAsync(client, $"tagIds={foreign}");
+        foreignPage.GetProperty("items").GetArrayLength().ShouldBe(0);
+        foreignPage.GetProperty("total").GetInt32().ShouldBe(0);
+
+        using var invalid = await client.Http.GetAsync($"{TransactionsPath}?tagIds=abc", Ct);
+        invalid.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Should_CountTransactionOnce_When_ItHasSeveralFilteredTags()
+    {
+        using var client = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+        var account = await CreateAccountAsync(client, "PLN");
+        var groceries = await CategoryIdAsync(client, "Groceries", "expense");
+        var t1 = await CreateAsync(client, groceries, account, 1_000, tags: ["trip", "food"]);
+        await CreateAsync(client, groceries, account, 500, tags: ["food"]);
+        var trip = await TagIdAsync(client, "trip");
+        var food = await TagIdAsync(client, "food");
+
+        var page = await GetPageAsync(client, $"tagIds={trip},{food}");
+
+        page.GetProperty("total").GetInt32().ShouldBe(2);
+        page.GetProperty("sum").GetInt64().ShouldBe(-1_500);
+        page.GetProperty("items").EnumerateArray().Count(item => item.GetProperty("id").GetGuid() == t1).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Should_MatchSearch_InTagNames()
+    {
+        using var client = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+        var account = await CreateAccountAsync(client, "PLN");
+        var groceries = await CategoryIdAsync(client, "Groceries", "expense");
+        var hotel = await CreateAsync(client, groceries, account, 100, title: "Hotel", tags: ["Barcelona"]);
+        var juice = await CreateAsync(client, groceries, account, 100, title: "Juice", tags: ["100%"]);
+        await CreateAsync(client, groceries, account, 100, title: "Plain");
+
+        (await IdsAsync(client, "search=barc")).ShouldBe([hotel]);
+        (await IdsAsync(client, $"search={Uri.EscapeDataString("%")}")).ShouldBe([juice]);
+    }
+
+    private static async Task<Guid> TagIdAsync(AuthClient client, string name) =>
+        (await GetPageAsync(client, "pageSize=100")).GetProperty("items").EnumerateArray()
+            .SelectMany(item => item.GetProperty("tags").EnumerateArray())
+            .First(tag => tag.GetProperty("name").GetString() == name)
+            .GetProperty("id").GetGuid();
+
     private static async Task<JsonElement> GetPageAsync(AuthClient client, string query)
     {
         using var response = await client.Http.GetAsync(query.Length == 0 ? TransactionsPath : $"{TransactionsPath}?{query}", Ct);
@@ -265,7 +335,8 @@ public sealed class ListTransactionsTests(MitaApiFactory factory) : IClassFixtur
         string date = DefaultDate,
         string currency = "PLN",
         string? title = null,
-        string? note = null)
+        string? note = null,
+        string[]? tags = null)
     {
         var body = new Dictionary<string, object?>
         {
@@ -284,6 +355,11 @@ public sealed class ListTransactionsTests(MitaApiFactory factory) : IClassFixtur
         if (note is not null)
         {
             body["note"] = note;
+        }
+
+        if (tags is not null)
+        {
+            body["tags"] = tags;
         }
 
         using var response = await client.Http.SendAsync(

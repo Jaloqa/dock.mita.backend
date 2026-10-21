@@ -43,5 +43,9 @@ public sealed class ListTransactionsValidator : AbstractValidator<ListTransactio
             .Must(id => Guid.TryParse(id, out _))
             .When(query => query.AccountId is not null)
             .WithErrorCode(InvalidValue);
+
+        RuleFor(query => query.TagIds)
+            .Must(ids => TagIdList.TryParse(ids, out _))
+            .WithErrorCode(InvalidValue);
     }
 }

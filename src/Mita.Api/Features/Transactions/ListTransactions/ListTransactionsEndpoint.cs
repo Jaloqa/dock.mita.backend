@@ -16,6 +16,7 @@ public static class ListTransactionsEndpoint
                     string? search = null,
                     string? categoryId = null,
                     string? accountId = null,
+                    string? tagIds = null,
                     string? kind = null,
                     string? from = null,
                     string? to = null,
@@ -23,7 +24,7 @@ public static class ListTransactionsEndpoint
                     int page = 1,
                     int pageSize = 20) =>
                     (await mediator.Send(
-                        new ListTransactionsQuery(search, categoryId, accountId, kind, from, to, sort, page, pageSize),
+                        new ListTransactionsQuery(search, categoryId, accountId, tagIds, kind, from, to, sort, page, pageSize),
                         ct))
                         .ToHttp(transactions => Results.Ok(transactions)))
             .RequireAuthorization(AuthExtensions.UserPolicy);
