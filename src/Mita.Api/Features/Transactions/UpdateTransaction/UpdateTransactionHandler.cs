@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Mita.Api.Authentication;
 using Mita.Api.Common;
+using Mita.Api.Common.Tags;
 using Mita.Api.Common.Transactions;
 using Mita.Infrastructure.Persistence;
 using Npgsql;
@@ -35,6 +36,8 @@ public sealed class UpdateTransactionHandler(AppDbContext db, ICurrentUser curre
             return prepared.Error!;
         }
 
+        var tagIds = await db.UpsertAsync(userId, input.Tags, cancellationToken);
+
         var locked = await db.Transactions
             .FromSql($"""SELECT * FROM transactions WHERE "Id" = {command.Id} AND "UserId" = {userId} FOR UPDATE""")
             .ToListAsync(cancellationToken);
@@ -45,6 +48,7 @@ public sealed class UpdateTransactionHandler(AppDbContext db, ICurrentUser curre
         }
 
         transaction.Update(prepared.Value);
+        await db.ReplaceAsync(transaction.Id, tagIds, cancellationToken);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -63,6 +67,9 @@ public sealed class UpdateTransactionHandler(AppDbContext db, ICurrentUser curre
 
         await databaseTransaction.CommitAsync(cancellationToken);
 
-        return TransactionQueries.From(transaction);
+        return await db.Transactions.AsNoTracking()
+            .Where(candidate => candidate.Id == command.Id)
+            .Select(TransactionQueries.ToDto)
+            .SingleAsync(cancellationToken);
     }
 }

@@ -1,3 +1,5 @@
+using Mita.Api.Common.Tags;
+
 namespace Mita.Api.Common.Transactions;
 
 public sealed record TransactionDto(
@@ -12,4 +14,5 @@ public sealed record TransactionDto(
     string Currency,
     long AccountAmount,
     double Rate,
-    long BaseAmount);
+    long BaseAmount,
+    IReadOnlyList<TransactionTagDto> Tags);

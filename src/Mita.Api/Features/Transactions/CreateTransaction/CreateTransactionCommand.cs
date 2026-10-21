@@ -17,7 +17,8 @@ public sealed record CreateTransactionRequest(
     JsonElement? AccountId,
     JsonElement? Amount,
     JsonElement? Currency,
-    JsonElement? Rate);
+    JsonElement? Rate,
+    JsonElement? Tags);
 
 public sealed record CreateTransactionCommand(
     JsonElement? Kind,
@@ -28,7 +29,8 @@ public sealed record CreateTransactionCommand(
     JsonElement? AccountId,
     JsonElement? Amount,
     JsonElement? Currency,
-    JsonElement? Rate) : IRequest<Result<TransactionDto>>, ITransactionInput, IInvalidatesCache
+    JsonElement? Rate,
+    JsonElement? Tags) : IRequest<Result<TransactionDto>>, ITransactionInput, IInvalidatesCache
 {
     public Guid? ExistingId => null;
 
