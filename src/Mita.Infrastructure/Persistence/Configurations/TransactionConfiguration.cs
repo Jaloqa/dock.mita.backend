@@ -31,6 +31,8 @@ public sealed class TransactionConfiguration : IEntityTypeConfiguration<Transact
         builder.HasIndex(transaction => transaction.AccountId);
         builder.HasIndex(transaction => transaction.CategoryId);
 
+        builder.Navigation(transaction => transaction.Tags).HasField("tags");
+
         builder.HasOne<AppUser>()
             .WithMany()
             .HasForeignKey(transaction => transaction.UserId)
