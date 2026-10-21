@@ -1,8 +1,10 @@
 using System.Text.Json;
 using FluentValidation;
+using FluentValidation.Results;
 using Mita.Api.Common.Categories;
 using Mita.Api.Common.Money;
 using Mita.Api.Common.Rates;
+using Mita.Api.Common.Tags;
 using Mita.Api.Common.Time;
 using Mita.Api.Common.Wire;
 using Mita.Domain.Categories;
@@ -67,6 +69,14 @@ public abstract class TransactionInputValidator<T> : AbstractValidator<T>
         RuleFor(input => input.Rate)
             .Must(value => ManualRate.TryParse(value, out _)).WithErrorCode(InvalidValue)
             .When(input => !JsonValues.IsMissing(input.Rate));
+
+        RuleFor(input => input.Tags).Custom((value, context) =>
+        {
+            if (TagNames.Error(value) is { } code)
+            {
+                context.AddFailure(new ValidationFailure(nameof(ITransactionInput.Tags), code) { ErrorCode = code });
+            }
+        });
     }
 
     private static string Trimmed(JsonElement? value) =>

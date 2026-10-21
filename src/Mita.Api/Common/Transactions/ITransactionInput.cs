@@ -22,5 +22,7 @@ public interface ITransactionInput
 
     JsonElement? Rate { get; }
 
+    JsonElement? Tags { get; }
+
     Guid? ExistingId { get; }
 }

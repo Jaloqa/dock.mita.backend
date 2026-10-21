@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Mita.Api.Authentication;
 using Mita.Api.Common;
+using Mita.Api.Common.Tags;
 using Mita.Api.Common.Transactions;
 using Mita.Domain.Transactions;
 using Mita.Infrastructure.Persistence;
@@ -27,8 +28,11 @@ public sealed class CreateTransactionHandler(AppDbContext db, ICurrentUser curre
             return prepared.Error!;
         }
 
+        var tagIds = await db.UpsertAsync(userId, input.Tags, cancellationToken);
+
         var transaction = Transaction.Create(userId, prepared.Value);
         db.Transactions.Add(transaction);
+        await db.ReplaceAsync(transaction.Id, tagIds, cancellationToken);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -47,6 +51,9 @@ public sealed class CreateTransactionHandler(AppDbContext db, ICurrentUser curre
 
         await databaseTransaction.CommitAsync(cancellationToken);
 
-        return TransactionQueries.From(transaction);
+        return await db.Transactions.AsNoTracking()
+            .Where(candidate => candidate.Id == transaction.Id)
+            .Select(TransactionQueries.ToDto)
+            .SingleAsync(cancellationToken);
     }
 }
