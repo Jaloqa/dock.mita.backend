@@ -45,7 +45,7 @@ public sealed class CreateTransactionTests(MitaApiFactory factory) : IClassFixtu
         var id = body.GetProperty("id").GetGuid();
         response.Headers.Location!.ToString().ShouldBe($"/v1/transactions/{id}");
         body.EnumerateObject().Select(property => property.Name).ShouldBe(
-            ["id", "kind", "date", "title", "note", "categoryId", "accountId", "amount", "currency", "accountAmount", "rate", "baseAmount"],
+            ["id", "kind", "date", "title", "note", "categoryId", "accountId", "amount", "currency", "accountAmount", "rate", "baseAmount", "tags"],
             ignoreOrder: true);
         body.GetProperty("kind").GetString().ShouldBe("expense");
         body.GetProperty("date").GetString().ShouldBe(TransactionDate);
