@@ -49,7 +49,7 @@ public sealed class FakeExchangeRateSource : IExchangeRateSource
         var rates = new List<PlnRate>();
         for (var date = from; date <= to; date = date.AddDays(1))
         {
-            rates.AddRange(ExchangeRate.Quoted.Select(currency => new PlnRate(currency, date, ValueFor(currency, date))));
+            rates.AddRange(new[] { Currency.EUR, Currency.USD, Currency.UAH }.Select(currency => new PlnRate(currency, date, ValueFor(currency, date))));
         }
 
         return Task.FromResult<IReadOnlyList<PlnRate>>(rates);

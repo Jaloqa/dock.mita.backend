@@ -6,7 +6,15 @@ public sealed class UserSettings
 {
     public Guid UserId { get; private set; }
 
-    public Currency BaseCurrency { get; set; }
+    private Currency baseCurrency;
+
+    public Currency BaseCurrency
+    {
+        get => baseCurrency;
+        set => baseCurrency = value.IsBase()
+            ? value
+            : throw new ArgumentException("The base currency must be PLN, EUR, USD or UAH.", nameof(value));
+    }
 
     public Locale Locale { get; set; }
 

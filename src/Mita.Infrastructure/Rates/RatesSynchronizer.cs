@@ -50,7 +50,7 @@ public sealed partial class RatesSynchronizer(
     }
 
     private static bool IsPlausible(PlnRate rate) =>
-        ExchangeRate.Quoted.Contains(rate.Currency)
+        SyncedCurrencies.All.Contains(rate.Currency)
         && ExchangeRate.Round(rate.Value) is > 0 and <= MaxPlnValue;
 
     private async Task<DateOnly> StartDateAsync(DateOnly today, CancellationToken ct)
@@ -61,7 +61,7 @@ public sealed partial class RatesSynchronizer(
             .Select(group => new { Currency = group.Key, Latest = group.Max(rate => rate.Date) })
             .ToListAsync(ct);
 
-        return ExchangeRate.Quoted.All(currency => latestPerCurrency.Any(latest => latest.Currency == currency))
+        return SyncedCurrencies.All.All(currency => latestPerCurrency.Any(latest => latest.Currency == currency))
             ? latestPerCurrency.Min(latest => latest.Latest).AddDays(1)
             : today.AddDays(-options.Value.HistoryDays);
     }
