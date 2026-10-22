@@ -243,7 +243,9 @@ public sealed class GetOverviewHandler(AppDbContext db, ICurrentUser currentUser
                     transaction.Kind,
                     transaction.Date,
                     transaction.Title,
+                    CategoryId = category.Id,
                     CategoryName = category.Name,
+                    CategoryColor = category.Color,
                     AccountName = account.Name,
                     transaction.BaseAmount
                 })
@@ -256,7 +258,9 @@ public sealed class GetOverviewHandler(AppDbContext db, ICurrentUser currentUser
                 CategoryWire.ToWire(row.Kind),
                 IsoDate.ToWire(row.Date),
                 row.Title,
+                row.CategoryId,
                 row.CategoryName,
+                CategoryWire.ToWire(row.CategoryColor),
                 row.AccountName,
                 row.BaseAmount))
             .ToList();

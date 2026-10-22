@@ -339,7 +339,9 @@ type OverviewTransaction = {
   kind: CategoryKind;
   date: string;           // YYYY-MM-DD
   title: string;          // "" when none
+  categoryId: string;     // GUID
   categoryName: string;
+  categoryColor: string;  // chart-1 to chart-6
   accountName: string;
   amount: number;         // minor units of the base currency (baseAmount)
 };

@@ -77,7 +77,7 @@ public sealed class OverviewTests(MitaApiFactory factory) : IClassFixture<MitaAp
             ["id", "categoryId", "name", "limit", "spent", "remaining", "status"],
             ignoreOrder: true);
         Names(overview.GetProperty("recent")[0]).ShouldBe(
-            ["id", "kind", "date", "title", "categoryName", "accountName", "amount"],
+            ["id", "kind", "date", "title", "categoryId", "categoryName", "categoryColor", "accountName", "amount"],
             ignoreOrder: true);
         Names(overview.GetProperty("goals")[0]).ShouldBe(
             ["id", "name", "target", "saved", "percent", "status", "deadline"],
@@ -300,7 +300,9 @@ public sealed class OverviewTests(MitaApiFactory factory) : IClassFixture<MitaAp
         newest.GetProperty("kind").GetString().ShouldBe("expense");
         newest.GetProperty("date").GetString().ShouldBe(Iso(today));
         newest.GetProperty("title").GetString().ShouldBe("t8");
+        newest.GetProperty("categoryId").GetGuid().ShouldBe(groceries.Id);
         newest.GetProperty("categoryName").GetString().ShouldBe("Weekly food");
+        newest.GetProperty("categoryColor").GetString().ShouldBe("chart-1");
         newest.GetProperty("accountName").GetString().ShouldBe(account.Name);
         newest.GetProperty("amount").GetInt64().ShouldBe(8_000);
     }
