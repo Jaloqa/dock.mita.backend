@@ -5,6 +5,8 @@ public sealed record OverviewTransactionResponse(
     string Kind,
     string Date,
     string Title,
+    Guid CategoryId,
     string CategoryName,
+    string CategoryColor,
     string AccountName,
     long Amount);
