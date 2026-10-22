@@ -47,3 +47,25 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          az containerapp update \
+            -g "${{ vars.AZURE_RESOURCE_GROUP }}" -n api \
+            --image ghcr.io/jaloqa/dock-mita-backend:${GITHUB_REF_NAME#v}
