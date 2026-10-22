@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Mita.Api.IntegrationTests.Infrastructure;
+using Mita.Domain.Debts;
 using Mita.Domain.Money;
 using Shouldly;
 
@@ -222,17 +223,64 @@ public sealed class UpdateDeleteAccountTests(MitaApiFactory factory) : IClassFix
         (await ListAsync(client)).GetProperty("total").GetInt32().ShouldBe(2);
     }
 
+    [Fact]
+    public async Task Should_RefuseDelete_When_AccountHasDebtLegs()
+    {
+        using var client = new AuthClient(factory);
+        var (debtAccount, repaymentAccount) = await SeedDebtLegsAsync(client);
+
+        foreach (var id in new[] { debtAccount, repaymentAccount })
+        {
+            using var response = await DeleteAsync(client, id);
+
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+            problem.GetProperty("errors").GetProperty("id").EnumerateArray().Select(code => code.GetString())
+                .ShouldBe(["validation.accountInUse"]);
+        }
+
+        (await ListAsync(client)).GetProperty("total").GetInt32().ShouldBe(2);
+
+        foreach (var id in new[] { debtAccount, repaymentAccount })
+        {
+            using var response = await PutAsync(client, id, Body(currency: "USD"));
+
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+            var errors = problem.GetProperty("errors");
+            errors.EnumerateObject().Select(property => property.Name).ShouldBe(["currency"]);
+            errors.GetProperty("currency").EnumerateArray().Select(code => code.GetString())
+                .ShouldBe(["validation.currencyLocked"]);
+        }
+    }
+
+    private async Task<(Guid DebtAccount, Guid RepaymentAccount)> SeedDebtLegsAsync(AuthClient client)
+    {
+        var userId = await RegisterAsync(client);
+        var debtAccount = await TestData.AddAccountAsync(factory, userId, Currency.PLN, 10_000);
+        var repaymentAccount = await TestData.AddAccountAsync(factory, userId, Currency.PLN, 0);
+        await TestData.AddDebtAsync(factory, userId, DebtDirection.Lent, 3_000, account: debtAccount);
+        var detached = await TestData.AddDebtAsync(factory, userId, DebtDirection.Lent, 999);
+        await TestData.AddRepaymentAsync(factory, detached, 500, repaymentAccount);
+        return (debtAccount.Id, repaymentAccount.Id);
+    }
+
     private async Task<(Guid From, Guid To)> SeedTransferAsync(AuthClient client)
+    {
+        var userId = await RegisterAsync(client);
+        var from = await TestData.AddAccountAsync(factory, userId, Currency.PLN, 10_000);
+        var to = await TestData.AddAccountAsync(factory, userId, Currency.PLN, 0);
+        await TestData.AddTransferAsync(factory, from, to, 100);
+        return (from.Id, to.Id);
+    }
+
+    private static async Task<Guid> RegisterAsync(AuthClient client)
     {
         var credentials = await client.RegisterNewAsync(Ct);
         using var me = await client.Http.GetAsync("/v1/me", Ct);
         var meBody = await me.Content.ReadFromJsonAsync<JsonElement>(Ct);
         meBody.GetProperty("email").GetString().ShouldBe(credentials.Email);
-        var userId = meBody.GetProperty("id").GetGuid();
-        var from = await TestData.AddAccountAsync(factory, userId, Currency.PLN, 10_000);
-        var to = await TestData.AddAccountAsync(factory, userId, Currency.PLN, 0);
-        await TestData.AddTransferAsync(factory, from, to, 100);
-        return (from.Id, to.Id);
+        return meBody.GetProperty("id").GetGuid();
     }
 
     private static Dictionary<string, object?> Body(

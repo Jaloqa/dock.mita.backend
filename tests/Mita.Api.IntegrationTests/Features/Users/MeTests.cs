@@ -11,6 +11,7 @@ using Mita.Api.IntegrationTests.Features.Auth;
 using Mita.Api.IntegrationTests.Infrastructure;
 using Mita.Domain.Accounts;
 using Mita.Domain.Categories;
+using Mita.Domain.Debts;
 using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
 using Shouldly;
@@ -280,6 +281,29 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
         (await db.Budgets.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
         (await db.Goals.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
         (await db.GoalContributions.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Should_DeleteUser_When_DebtsUseAccounts()
+    {
+        using var client = new AuthClient(factory);
+        var credentials = await client.RegisterNewAsync(Ct);
+        var userId = (await GetMeAsync(client)).GetProperty("id").GetGuid();
+        var lentFrom = await TestData.AddAccountAsync(factory, userId, openingBalance: 10_000);
+        var repaidInto = await TestData.AddAccountAsync(factory, userId);
+        var debt = await TestData.AddDebtAsync(factory, userId, DebtDirection.Lent, 3_000, account: lentFrom);
+        await TestData.AddRepaymentAsync(factory, debt, 1_000, repaidInto);
+
+        using (var response = await DeleteAsync(client, new { password = credentials.Password }))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await db.Accounts.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+        (await db.Debts.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+        (await db.DebtRepayments.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
     }
 
     [Fact]
