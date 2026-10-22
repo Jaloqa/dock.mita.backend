@@ -6,5 +6,5 @@ public sealed record PlnRate(Currency Currency, DateOnly Date, decimal Value);
 
 public interface IExchangeRateSource
 {
-    Task<IReadOnlyList<PlnRate>> FetchAsync(DateOnly from, DateOnly to, CancellationToken ct);
+    Task<IReadOnlyList<PlnRate>> FetchAsync(NbpTable table, DateOnly from, DateOnly to, CancellationToken ct);
 }

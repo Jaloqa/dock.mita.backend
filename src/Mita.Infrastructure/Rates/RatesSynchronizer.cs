@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -22,23 +23,30 @@ public sealed partial class RatesSynchronizer(
     {
         var now = time.GetUtcNow();
         var today = DateOnly.FromDateTime(now.UtcDateTime);
-        var start = await StartDateAsync(today, ct);
-        if (start > today)
+        var latestPerCurrency = await db.ExchangeRates
+            .AsNoTracking()
+            .GroupBy(rate => rate.Currency)
+            .Select(group => new { Currency = group.Key, Latest = group.Max(rate => rate.Date) })
+            .ToDictionaryAsync(entry => entry.Currency, entry => entry.Latest, ct);
+
+        var inserted = 0;
+        var failures = new List<Exception>();
+        foreach (var table in NbpTables.All)
         {
-            return 0;
+            try
+            {
+                inserted += await SyncTableAsync(table, today, now, latestPerCurrency, ct);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                LogTableSyncFailed(logger, table, exception);
+                failures.Add(exception);
+            }
         }
 
-        var fetched = await source.FetchAsync(start, today, ct);
-        var inserted = 0;
-        foreach (var rate in fetched.Where(IsPlausible))
+        if (failures.Count == NbpTables.All.Count)
         {
-            inserted += await db.Database.ExecuteSqlInterpolatedAsync(
-                $"""
-                INSERT INTO exchange_rates ("Currency", "Date", "PlnValue", "FetchedAt")
-                VALUES ({rate.Currency.ToString()}, {rate.Date}, {ExchangeRate.Round(rate.Value)}, {now})
-                ON CONFLICT DO NOTHING
-                """,
-                ct);
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
         }
 
         if (inserted > 0)
@@ -50,20 +58,55 @@ public sealed partial class RatesSynchronizer(
     }
 
     private static bool IsPlausible(PlnRate rate) =>
-        SyncedCurrencies.All.Contains(rate.Currency)
+        rate.Currency != Currency.PLN
         && ExchangeRate.Round(rate.Value) is > 0 and <= MaxPlnValue;
 
-    private async Task<DateOnly> StartDateAsync(DateOnly today, CancellationToken ct)
+    private async Task<int> SyncTableAsync(
+        NbpTable table,
+        DateOnly today,
+        DateTimeOffset now,
+        Dictionary<Currency, DateOnly> latestPerCurrency,
+        CancellationToken ct)
     {
-        var latestPerCurrency = await db.ExchangeRates
-            .AsNoTracking()
-            .GroupBy(rate => rate.Currency)
-            .Select(group => new { Currency = group.Key, Latest = group.Max(rate => rate.Date) })
-            .ToListAsync(ct);
+        var start = StartDate(table, today, latestPerCurrency);
+        if (start > today)
+        {
+            return 0;
+        }
 
-        return SyncedCurrencies.All.All(currency => latestPerCurrency.Any(latest => latest.Currency == currency))
-            ? latestPerCurrency.Min(latest => latest.Latest).AddDays(1)
-            : today.AddDays(-options.Value.HistoryDays);
+        var fetched = await source.FetchAsync(table, start, today, ct);
+        var plausible = fetched.Where(IsPlausible).ToList();
+        if (plausible.Count == 0)
+        {
+            return 0;
+        }
+
+        var currencies = plausible.Select(rate => rate.Currency.ToString()).ToArray();
+        var dates = plausible.Select(rate => rate.Date).ToArray();
+        var values = plausible.Select(rate => ExchangeRate.Round(rate.Value)).ToArray();
+        return await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO exchange_rates ("Currency", "Date", "PlnValue", "FetchedAt")
+            SELECT rate.currency, rate.date, rate.value, {now}
+            FROM unnest({currencies}::text[], {dates}::date[], {values}::numeric[]) AS rate(currency, date, value)
+            ON CONFLICT DO NOTHING
+            """,
+            ct);
+    }
+
+    private DateOnly StartDate(NbpTable table, DateOnly today, Dictionary<Currency, DateOnly> latestPerCurrency)
+    {
+        var currencies = NbpTables.CurrenciesOf(table);
+        var withoutRows = currencies.Where(currency => !latestPerCurrency.ContainsKey(currency)).ToList();
+        if (withoutRows.Count == 0)
+        {
+            return currencies.Max(currency => latestPerCurrency[currency]).AddDays(1);
+        }
+
+        var from = today.AddDays(-options.Value.HistoryDays);
+        var names = string.Join(", ", withoutRows);
+        LogFullWindowFetch(logger, table, names, from);
+        return from;
     }
 
     private async Task InvalidateCacheAsync(CancellationToken ct)
@@ -80,4 +123,12 @@ public sealed partial class RatesSynchronizer(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not invalidate the exchange rates cache after a sync")]
     private static partial void LogInvalidationFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Exchange rates sync of NBP table {Table} failed")]
+    private static partial void LogTableSyncFailed(ILogger logger, NbpTable table, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "NBP table {Table} has no stored rates for {Currencies}; fetching from {From}")]
+    private static partial void LogFullWindowFetch(ILogger logger, NbpTable table, string currencies, DateOnly from);
 }

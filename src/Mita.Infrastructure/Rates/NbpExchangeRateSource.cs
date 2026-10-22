@@ -1,52 +1,78 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using Mita.Domain.Money;
 
 namespace Mita.Infrastructure.Rates;
 
-public sealed class NbpExchangeRateSource(HttpClient http) : IExchangeRateSource
+public sealed partial class NbpExchangeRateSource(HttpClient http, ILogger<NbpExchangeRateSource> logger)
+    : IExchangeRateSource
 {
     private const int MaxWindowDays = 93;
+    private const string UnitOfAccount = "XDR";
 
-    private static readonly Dictionary<string, Currency> Quoted =
-        SyncedCurrencies.All.ToDictionary(currency => currency.ToString(), StringComparer.Ordinal);
-
-    public async Task<IReadOnlyList<PlnRate>> FetchAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    public async Task<IReadOnlyList<PlnRate>> FetchAsync(
+        NbpTable table,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct)
     {
         var rates = new List<PlnRate>();
+        var unsupported = new HashSet<string>(StringComparer.Ordinal);
         for (var start = from; start <= to; start = start.AddDays(MaxWindowDays))
         {
             var end = start.AddDays(MaxWindowDays - 1) < to ? start.AddDays(MaxWindowDays - 1) : to;
-            rates.AddRange(await FetchWindowAsync(start, end, ct));
+            await FetchWindowAsync(table, start, end, rates, unsupported, ct);
         }
 
         return rates;
     }
 
-    private async Task<List<PlnRate>> FetchWindowAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    private async Task FetchWindowAsync(
+        NbpTable table,
+        DateOnly from,
+        DateOnly to,
+        List<PlnRate> rates,
+        HashSet<string> unsupported,
+        CancellationToken ct)
     {
         var path = string.Create(
             CultureInfo.InvariantCulture,
-            $"exchangerates/tables/A/{from:yyyy-MM-dd}/{to:yyyy-MM-dd}/?format=json");
+            $"exchangerates/tables/{table}/{from:yyyy-MM-dd}/{to:yyyy-MM-dd}/?format=json");
         using var response = await http.GetAsync(path, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            return [];
+            return;
         }
 
         response.EnsureSuccessStatusCode();
-        var tables = await response.Content.ReadFromJsonAsync<List<NbpTable>>(ct) ?? [];
-        return
-        [
-            .. tables
-                .SelectMany(table => table.Rates ?? [], (table, rate) => (table, rate))
-                .Where(entry => entry.rate.Code is not null && Quoted.ContainsKey(entry.rate.Code))
-                .Select(entry => new PlnRate(Quoted[entry.rate.Code!], entry.table.EffectiveDate, entry.rate.Mid))
-        ];
+        var days = await response.Content.ReadFromJsonAsync<List<NbpDay>>(ct) ?? [];
+        foreach (var day in days)
+        {
+            foreach (var rate in day.Rates ?? [])
+            {
+                if (rate.Code is null || rate.Code == UnitOfAccount)
+                {
+                    continue;
+                }
+
+                if (Currencies.TryParse(rate.Code, out var currency) && currency != Currency.PLN)
+                {
+                    rates.Add(new PlnRate(currency, day.EffectiveDate, rate.Mid));
+                }
+                else if (unsupported.Add(rate.Code))
+                {
+                    LogUnsupportedCurrency(logger, table, rate.Code);
+                }
+            }
+        }
     }
 
-    private sealed record NbpTable(DateOnly EffectiveDate, List<NbpRate>? Rates);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "NBP table {Table} has rates for unsupported currency {Code}")]
+    private static partial void LogUnsupportedCurrency(ILogger logger, NbpTable table, string code);
+
+    private sealed record NbpDay(DateOnly EffectiveDate, List<NbpRate>? Rates);
 
     private sealed record NbpRate(string? Code, decimal Mid);
 }
