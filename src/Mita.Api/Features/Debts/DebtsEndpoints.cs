@@ -1,6 +1,9 @@
 using Mita.Api.Extensions;
+using Mita.Api.Features.Debts.AddRepayment;
 using Mita.Api.Features.Debts.CreateDebt;
+using Mita.Api.Features.Debts.DeleteRepayment;
 using Mita.Api.Features.Debts.ListDebts;
+using Mita.Api.Features.Debts.ListRepayments;
 
 namespace Mita.Api.Features.Debts;
 
@@ -11,7 +14,10 @@ public static class DebtsEndpoints
         app.MapV1()
             .WithTags("Debts")
             .MapListDebts()
-            .MapCreateDebt();
+            .MapCreateDebt()
+            .MapAddRepayment()
+            .MapListRepayments()
+            .MapDeleteRepayment();
 
         return app;
     }
