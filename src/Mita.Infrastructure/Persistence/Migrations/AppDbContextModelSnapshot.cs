@@ -284,6 +284,146 @@ namespace Mita.Infrastructure.Persistence.Migrations
                     b.ToTable("categories", (string)null);
                 });
 
+            modelBuilder.Entity("Mita.Domain.Debts.Debt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("AccountAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Counterparty")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("Rate")
+                        .HasPrecision(24, 12)
+                        .HasColumnType("numeric(24,12)");
+
+                    b.Property<long>("Repaid")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("UserId", "Date");
+
+                    b.ToTable("debts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_debts_account_amount_positive", "\"AccountAmount\" > 0");
+
+                            t.HasCheckConstraint("CK_debts_account_fields", "(\"AccountId\" IS NULL) = (\"AccountAmount\" IS NULL) AND (\"AccountId\" IS NULL) = (\"Rate\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_debts_amount_positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_debts_due_after_date", "\"DueDate\" >= \"Date\"");
+
+                            t.HasCheckConstraint("CK_debts_repaid_range", "\"Repaid\" >= 0 AND \"Repaid\" <= \"Amount\"");
+                        });
+                });
+
+            modelBuilder.Entity("Mita.Domain.Debts.DebtRepayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("AccountAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<long>("DebtAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("DebtId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Rate")
+                        .HasPrecision(24, 12)
+                        .HasColumnType("numeric(24,12)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("DebtId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("debt_repayments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_debt_repayments_account_amount_positive", "\"AccountAmount\" > 0");
+
+                            t.HasCheckConstraint("CK_debt_repayments_account_fields", "(\"AccountId\" IS NULL) = (\"AccountAmount\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_debt_repayments_amount_positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_debt_repayments_debt_amount_positive", "\"DebtAmount\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("Mita.Domain.Goals.Goal", b =>
                 {
                     b.Property<Guid>("Id")
@@ -779,6 +919,40 @@ namespace Mita.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Mita.Domain.Categories.Category", b =>
                 {
+                    b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Debts.Debt", b =>
+                {
+                    b.HasOne("Mita.Domain.Accounts.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Debts.DebtRepayment", b =>
+                {
+                    b.HasOne("Mita.Domain.Accounts.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Mita.Domain.Debts.Debt", null)
+                        .WithMany()
+                        .HasForeignKey("DebtId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")

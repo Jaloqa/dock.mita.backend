@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Mita.Domain.Accounts;
 using Mita.Domain.Budgets;
 using Mita.Domain.Categories;
+using Mita.Domain.Debts;
 using Mita.Domain.Goals;
 using Mita.Domain.Money;
 using Mita.Domain.Periods;
@@ -193,6 +194,68 @@ public static class TestData
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
+    public static async Task<Debt> AddDebtAsync(
+        WebApplicationFactory<Program> factory,
+        Guid userId,
+        DebtDirection direction,
+        long amount,
+        Currency currency = Currency.PLN,
+        Account? account = null,
+        string date = "2026-10-01",
+        string? dueDate = null)
+    {
+        var rate = account is null ? (decimal?)null : account.Currency == currency ? 1m : 2m;
+        var debt = Debt.Create(
+            userId,
+            new DebtDetails(
+                direction,
+                "Max",
+                amount,
+                currency,
+                ParseDate(date),
+                dueDate is null ? null : ParseDate(dueDate),
+                account?.Id,
+                account is null ? null : MinorUnits.Convert(amount, rate!.Value, currency, account.Currency),
+                rate,
+                null));
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Debts.Add(debt);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return debt;
+    }
+
+    public static async Task<DebtRepayment> AddRepaymentAsync(
+        WebApplicationFactory<Program> factory,
+        Debt debt,
+        long amount,
+        Account? account = null,
+        string date = "2026-10-05")
+    {
+        var accountRate = account is null ? (decimal?)null : account.Currency == debt.Currency ? 1m : 2m;
+        var repayment = DebtRepayment.Create(
+            debt.UserId,
+            debt.Id,
+            new RepaymentDetails(
+                ParseDate(date),
+                amount,
+                debt.Currency,
+                1m,
+                amount,
+                account?.Id,
+                account is null ? null : MinorUnits.Convert(amount, accountRate!.Value, debt.Currency, account.Currency),
+                null));
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var stored = await db.Debts.SingleAsync(row => row.Id == debt.Id, TestContext.Current.CancellationToken);
+        stored.Repay(amount);
+        db.DebtRepayments.Add(repayment);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return repayment;
+    }
+
     public static async Task AddRatesAsync(
         WebApplicationFactory<Program> factory,
         params (Currency Currency, string Date, decimal PlnValue)[] rows)
@@ -219,6 +282,9 @@ public static class TestData
 
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
+
+    private static DateOnly ParseDate(string date) =>
+        DateOnly.ParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static PeriodKey ParsePeriod(string period) =>
         PeriodKey.TryParse(period, out var key) ? key : throw new ArgumentException("Invalid period.", nameof(period));

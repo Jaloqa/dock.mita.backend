@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Mita.Domain.Accounts;
 using Mita.Domain.Budgets;
 using Mita.Domain.Categories;
+using Mita.Domain.Debts;
 using Mita.Domain.Goals;
 using Mita.Domain.Money;
 using Mita.Domain.Tags;
@@ -37,6 +38,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     public DbSet<Goal> Goals => Set<Goal>();
 
     public DbSet<GoalContribution> GoalContributions => Set<GoalContribution>();
+
+    public DbSet<Debt> Debts => Set<Debt>();
+
+    public DbSet<DebtRepayment> DebtRepayments => Set<DebtRepayment>();
 
     public DbSet<Tag> Tags => Set<Tag>();
 
