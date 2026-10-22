@@ -11,9 +11,9 @@ public sealed class GetRatesValidatorTests
         { "2026-1-01", null, null, "Date" },
         { "x", null, null, "Date" },
         { "2026-03-02", "pln", null, "From" },
-        { "2026-03-02", "GBP", null, "From" },
+        { "2026-03-02", "XDR", null, "From" },
         { "2026-03-02", null, "pln", "To" },
-        { "2026-03-02", null, "GBP", "To" }
+        { "2026-03-02", null, "XDR", "To" }
     };
 
     [Theory]

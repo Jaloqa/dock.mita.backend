@@ -22,6 +22,15 @@ public sealed class UserSettingsTests
         settings.Notifications.ShouldBe(new NotificationPrefs(true, true, false, true));
     }
 
+    [Fact]
+    public void Should_RejectNonBaseCurrency_When_SettingBaseCurrency()
+    {
+        var settings = UserSettings.CreateDefault(Guid.NewGuid(), Locale.En);
+
+        Should.Throw<ArgumentException>(() => settings.BaseCurrency = Currency.JPY);
+        settings.BaseCurrency.ShouldBe(Currency.PLN);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(29)]

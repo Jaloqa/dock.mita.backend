@@ -126,6 +126,18 @@ public sealed class SettingsTests(MitaApiFactory factory) : IClassFixture<MitaAp
     }
 
     [Fact]
+    public async Task Should_RejectNonBaseCurrency_When_UpdatingSettings()
+    {
+        using var client = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+
+        var errors = await ErrorsAsync(client, ValidBody(baseCurrency: "JPY"));
+
+        errors["baseCurrency"].ShouldBe(["validation.invalidValue"]);
+        (await GetAsync(client)).GetProperty("baseCurrency").GetString().ShouldBe("PLN");
+    }
+
+    [Fact]
     public async Task Should_ReturnInvalidValue_When_BaseCurrencyIsNumber()
     {
         using var client = new AuthClient(factory);

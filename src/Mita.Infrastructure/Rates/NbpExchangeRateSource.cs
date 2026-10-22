@@ -10,7 +10,7 @@ public sealed class NbpExchangeRateSource(HttpClient http) : IExchangeRateSource
     private const int MaxWindowDays = 93;
 
     private static readonly Dictionary<string, Currency> Quoted =
-        ExchangeRate.Quoted.ToDictionary(currency => currency.ToString(), StringComparer.Ordinal);
+        SyncedCurrencies.All.ToDictionary(currency => currency.ToString(), StringComparer.Ordinal);
 
     public async Task<IReadOnlyList<PlnRate>> FetchAsync(DateOnly from, DateOnly to, CancellationToken ct)
     {

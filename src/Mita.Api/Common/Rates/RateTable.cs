@@ -12,7 +12,7 @@ public static class RateTable
         CancellationToken ct)
     {
         var values = new Dictionary<Currency, decimal> { [Currency.PLN] = 1m };
-        foreach (var currency in ExchangeRate.Quoted)
+        foreach (var currency in Currencies.Quoted)
         {
             var rates = db.ExchangeRates.AsNoTracking().Where(rate => rate.Currency == currency);
             var latestBefore = await rates

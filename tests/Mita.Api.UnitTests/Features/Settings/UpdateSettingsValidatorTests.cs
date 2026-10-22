@@ -12,6 +12,7 @@ public sealed class UpdateSettingsValidatorTests
     public static TheoryData<string, string, string> InvalidFields => new()
     {
         { "baseCurrency", "\"GBP\"", "validation.invalidValue" },
+        { "baseCurrency", "\"JPY\"", "validation.invalidValue" },
         { "baseCurrency", "\"pln\"", "validation.invalidValue" },
         { "baseCurrency", "\"\"", "validation.invalidValue" },
         { "baseCurrency", "5", "validation.invalidValue" },

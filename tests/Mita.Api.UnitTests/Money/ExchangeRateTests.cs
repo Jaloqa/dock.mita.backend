@@ -11,10 +11,4 @@ public sealed class ExchangeRateTests
         ExchangeRate.Cross(4.27m, 3.93m).ShouldBe(1.086514m);
         ExchangeRate.Round(0.0000004m).ShouldBe(0m);
     }
-
-    [Fact]
-    public void Should_QuoteEveryCurrencyExceptPln()
-    {
-        ExchangeRate.Quoted.ShouldBe([Currency.EUR, Currency.USD, Currency.UAH]);
-    }
 }

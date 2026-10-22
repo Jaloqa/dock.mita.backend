@@ -31,7 +31,7 @@ public static class SettingsWire
         element is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined };
 
     public static bool TryParseCurrency(JsonElement? element, out Currency currency) =>
-        CurrencyWire.TryParse(element, out currency);
+        CurrencyWire.TryParse(element, out currency) && currency.IsBase();
 
     public static bool TryParseLocale(JsonElement? element, out Locale locale)
     {

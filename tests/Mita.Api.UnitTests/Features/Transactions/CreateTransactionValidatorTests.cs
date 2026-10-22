@@ -44,7 +44,7 @@ public sealed class CreateTransactionValidatorTests
         { "amount", "\"10\"", "validation.invalidValue" },
         { "amount", "100000000001", "validation.invalidValue" },
         { "currency", "null", "validation.required" },
-        { "currency", "\"GBP\"", "validation.invalidValue" },
+        { "currency", "\"XDR\"", "validation.invalidValue" },
         { "currency", "\"pln\"", "validation.invalidValue" },
         { "rate", "0", "validation.invalidValue" },
         { "rate", "-1", "validation.invalidValue" },

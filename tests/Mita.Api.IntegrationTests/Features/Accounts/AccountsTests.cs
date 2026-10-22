@@ -66,6 +66,19 @@ public sealed class AccountsTests(MitaApiFactory factory) : IClassFixture<MitaAp
     }
 
     [Fact]
+    public async Task Should_CreateAccount_When_CurrencyIsJpy()
+    {
+        using var client = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+
+        using var response = await PostAsync(client, Body(currency: "JPY"));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        body.GetProperty("currency").GetString().ShouldBe("JPY");
+    }
+
+    [Fact]
     public async Task Should_DropCardLast4_When_TypeIsNotCard()
     {
         using var client = new AuthClient(factory);
