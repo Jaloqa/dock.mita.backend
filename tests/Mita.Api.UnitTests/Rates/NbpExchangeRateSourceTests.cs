@@ -3,6 +3,8 @@ using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Mita.Domain.Money;
 using Mita.Infrastructure;
 using Mita.Infrastructure.Rates;
@@ -43,14 +45,72 @@ public sealed class NbpExchangeRateSourceTests
         using var handler = new StubHandler(_ => Json(TwoDayTable));
         using var http = Client(handler);
 
-        var rates = await new NbpExchangeRateSource(http).FetchAsync(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 6), Ct);
+        var rates = await new NbpExchangeRateSource(http, NullLogger<NbpExchangeRateSource>.Instance).FetchAsync(NbpTable.A, new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 6), Ct);
 
-        rates.Count.ShouldBe(6);
+        rates.Count.ShouldBe(8);
         rates.ShouldContain(new PlnRate(Currency.EUR, new DateOnly(2026, 1, 2), 4.2717m));
+        rates.ShouldContain(new PlnRate(Currency.GBP, new DateOnly(2026, 1, 5), 5.0100m));
         rates.ShouldContain(new PlnRate(Currency.USD, new DateOnly(2026, 1, 2), 3.9312m));
         rates.ShouldContain(new PlnRate(Currency.UAH, new DateOnly(2026, 1, 2), 0.0948m));
         rates.ShouldContain(new PlnRate(Currency.EUR, new DateOnly(2026, 1, 5), 4.2801m));
         rates.ShouldAllBe(rate => rate.Currency != Currency.PLN);
+    }
+
+    [Fact]
+    public async Task Should_ParseTableB_When_NbpAnswers()
+    {
+        const string tableB = """
+            [
+              {
+                "table": "B", "no": "042/B/NBP/2026", "effectiveDate": "2026-10-21",
+                "rates": [
+                  { "currency": "dinar kuwejcki", "code": "KWD", "mid": 12.6221 },
+                  { "currency": "rial irański", "code": "IRR", "mid": 0.00000212 },
+                  { "currency": "dong wietnamski", "code": "VND", "mid": 0.0001503 },
+                  { "currency": "nieznana", "code": "ZZZ", "mid": 1.0 }
+                ]
+              }
+            ]
+            """;
+        using var handler = new StubHandler(_ => Json(tableB));
+        using var http = Client(handler);
+        var logger = new CapturingLogger<NbpExchangeRateSource>();
+
+        var rates = await new NbpExchangeRateSource(http, logger)
+            .FetchAsync(NbpTable.B, new DateOnly(2026, 10, 21), new DateOnly(2026, 10, 21), Ct);
+
+        rates.Count.ShouldBe(3);
+        rates.ShouldContain(new PlnRate(Currency.KWD, new DateOnly(2026, 10, 21), 12.6221m));
+        rates.ShouldContain(new PlnRate(Currency.IRR, new DateOnly(2026, 10, 21), 0.00000212m));
+        rates.ShouldContain(new PlnRate(Currency.VND, new DateOnly(2026, 10, 21), 0.0001503m));
+        handler.Requests.Single().RequestUri!.AbsolutePath.ShouldContain("/tables/B/");
+        logger.Warnings.Count.ShouldBe(1);
+        logger.Warnings.Single().ShouldContain("ZZZ");
+    }
+
+    [Fact]
+    public async Task Should_IgnoreXdr_When_TableAContainsIt()
+    {
+        const string tableA = """
+            [
+              {
+                "table": "A", "no": "001/A/NBP/2026", "effectiveDate": "2026-01-02",
+                "rates": [
+                  { "currency": "SDR (MFW)", "code": "XDR", "mid": 5.5 },
+                  { "currency": "jen", "code": "JPY", "mid": 0.024764 }
+                ]
+              }
+            ]
+            """;
+        using var handler = new StubHandler(_ => Json(tableA));
+        using var http = Client(handler);
+        var logger = new CapturingLogger<NbpExchangeRateSource>();
+
+        var rates = await new NbpExchangeRateSource(http, logger)
+            .FetchAsync(NbpTable.A, new DateOnly(2026, 1, 2), new DateOnly(2026, 1, 2), Ct);
+
+        rates.ShouldBe([new PlnRate(Currency.JPY, new DateOnly(2026, 1, 2), 0.024764m)]);
+        logger.Warnings.ShouldBeEmpty();
     }
 
     [Fact]
@@ -59,7 +119,7 @@ public sealed class NbpExchangeRateSourceTests
         using var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
         using var http = Client(handler);
 
-        var rates = await new NbpExchangeRateSource(http).FetchAsync(new DateOnly(2026, 1, 3), new DateOnly(2026, 1, 4), Ct);
+        var rates = await new NbpExchangeRateSource(http, NullLogger<NbpExchangeRateSource>.Instance).FetchAsync(NbpTable.A, new DateOnly(2026, 1, 3), new DateOnly(2026, 1, 4), Ct);
 
         rates.ShouldBeEmpty();
     }
@@ -71,7 +131,7 @@ public sealed class NbpExchangeRateSourceTests
         using var http = Client(handler);
 
         await Should.ThrowAsync<HttpRequestException>(
-            () => new NbpExchangeRateSource(http).FetchAsync(new DateOnly(2026, 1, 3), new DateOnly(2026, 1, 4), Ct));
+            () => new NbpExchangeRateSource(http, NullLogger<NbpExchangeRateSource>.Instance).FetchAsync(NbpTable.A, new DateOnly(2026, 1, 3), new DateOnly(2026, 1, 4), Ct));
     }
 
     [Fact]
@@ -80,7 +140,7 @@ public sealed class NbpExchangeRateSourceTests
         using var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
         using var http = Client(handler);
 
-        await new NbpExchangeRateSource(http).FetchAsync(new DateOnly(2026, 1, 1), new DateOnly(2026, 7, 1), Ct);
+        await new NbpExchangeRateSource(http, NullLogger<NbpExchangeRateSource>.Instance).FetchAsync(NbpTable.A, new DateOnly(2026, 1, 1), new DateOnly(2026, 7, 1), Ct);
 
         handler.Requests.Select(request => request.RequestUri!.AbsolutePath).ShouldBe(
         [
@@ -96,7 +156,7 @@ public sealed class NbpExchangeRateSourceTests
         using var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
         using var http = Client(handler);
 
-        await new NbpExchangeRateSource(http).FetchAsync(new DateOnly(2026, 1, 1), new DateOnly(2026, 4, 3), Ct);
+        await new NbpExchangeRateSource(http, NullLogger<NbpExchangeRateSource>.Instance).FetchAsync(NbpTable.A, new DateOnly(2026, 1, 1), new DateOnly(2026, 4, 3), Ct);
 
         handler.Requests.Count.ShouldBe(1);
     }
@@ -127,10 +187,10 @@ public sealed class NbpExchangeRateSourceTests
         await using var provider = services.BuildServiceProvider();
 
         var rates = await provider.GetRequiredService<IExchangeRateSource>()
-            .FetchAsync(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 6), Ct);
+            .FetchAsync(NbpTable.A, new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 6), Ct);
 
         handler.Requests.Count.ShouldBe(2);
-        rates.Count.ShouldBe(6);
+        rates.Count.ShouldBe(8);
     }
 
     private static HttpClient Client(HttpMessageHandler handler) =>
@@ -138,6 +198,44 @@ public sealed class NbpExchangeRateSourceTests
 
     private static HttpResponseMessage Json(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        private readonly Lock gate = new();
+        private readonly List<string> warnings = [];
+
+        public IReadOnlyList<string> Warnings
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return [.. warnings];
+                }
+            }
+        }
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+            {
+                lock (gate)
+                {
+                    warnings.Add(formatter(state, exception));
+                }
+            }
+        }
+    }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
