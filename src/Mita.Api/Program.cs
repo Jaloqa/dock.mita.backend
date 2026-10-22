@@ -4,6 +4,7 @@ using Mita.Api.Features.Accounts;
 using Mita.Api.Features.Auth;
 using Mita.Api.Features.Budgets;
 using Mita.Api.Features.Categories;
+using Mita.Api.Features.Debts;
 using Mita.Api.Features.Goals;
 using Mita.Api.Features.Overview;
 using Mita.Api.Features.Rates;
@@ -62,6 +63,7 @@ app.MapTransactionsEndpoints();
 app.MapTagsEndpoints();
 app.MapBudgetsEndpoints();
 app.MapGoalsEndpoints();
+app.MapDebtsEndpoints();
 app.MapReportsEndpoints();
 app.MapOverviewEndpoints();
 
