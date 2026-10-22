@@ -118,7 +118,7 @@ public sealed class ContributeToGoalHandler(AppDbContext db, ICurrentUser curren
                 source.Currency,
                 source.Id,
                 transfer.Id,
-                MinorUnits.Convert(transfer.ToAmount, baseRate),
+                MinorUnits.Convert(transfer.ToAmount, baseRate, target.Currency, baseCurrency),
                 baseCurrency);
         }
         else

@@ -186,6 +186,27 @@ public sealed class ListTransactionsTests(MitaApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task Should_MatchAmountSearch_InCurrencyDigits()
+    {
+        using var client = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+        var userId = await UserIdAsync(client);
+        var category = await TestData.AddCategoryAsync(factory, userId);
+        var jpy = (await TestData.AddTransactionAsync(
+            factory, await TestData.AddAccountAsync(factory, userId, Currency.JPY), category, 1_500, "2026-10-01")).Id;
+        var kwd = (await TestData.AddTransactionAsync(
+            factory, await TestData.AddAccountAsync(factory, userId, Currency.KWD), category, 12_500, "2026-10-02")).Id;
+        var pln = (await TestData.AddTransactionAsync(
+            factory, await TestData.AddAccountAsync(factory, userId), category, 1_250, "2026-10-03")).Id;
+
+        (await IdsAsync(client, "search=1500")).ShouldBe([jpy]);
+        (await IdsAsync(client, "search=15.00")).ShouldBeEmpty();
+        (await IdsAsync(client, "search=12.5")).ShouldBe([pln, kwd]);
+        (await IdsAsync(client, $"search={Uri.EscapeDataString("12,500")}")).ShouldBe([kwd]);
+        (await IdsAsync(client, $"search={Uri.EscapeDataString("12,5")}")).ShouldContain(pln);
+    }
+
+    [Fact]
     public async Task Should_TreatSearchLiterally_When_ContainsWildcards()
     {
         using var client = new AuthClient(factory);
@@ -321,6 +342,13 @@ public sealed class ListTransactionsTests(MitaApiFactory factory) : IClassFixtur
         using var response = await client.Http.GetAsync(query.Length == 0 ? TransactionsPath : $"{TransactionsPath}?{query}", Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         return await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+    }
+
+    private static async Task<Guid> UserIdAsync(AuthClient client)
+    {
+        using var response = await client.Http.GetAsync("/v1/me", Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        return (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
     }
 
     private static async Task<Guid[]> IdsAsync(AuthClient client, string query) =>

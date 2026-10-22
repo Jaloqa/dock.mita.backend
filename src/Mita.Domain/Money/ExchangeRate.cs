@@ -10,7 +10,18 @@ public sealed class ExchangeRate(Currency currency, DateOnly date, decimal plnVa
 
     public DateTimeOffset FetchedAt { get; set; } = fetchedAt;
 
-    public static decimal Round(decimal rate) => Math.Round(rate, 6, MidpointRounding.AwayFromZero);
+    public const int MaxDecimals = 12;
+
+    public static decimal Round(decimal rate)
+    {
+        var decimals = 6;
+        for (var scaled = Math.Abs(rate); scaled != 0 && scaled < 0.1m && decimals < MaxDecimals; scaled *= 10)
+        {
+            decimals++;
+        }
+
+        return Math.Round(rate, decimals, MidpointRounding.AwayFromZero);
+    }
 
     public static decimal Cross(decimal fromPln, decimal toPln) => Round(fromPln / toPln);
 }

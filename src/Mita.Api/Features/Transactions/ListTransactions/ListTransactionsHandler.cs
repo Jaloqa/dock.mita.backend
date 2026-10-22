@@ -8,6 +8,7 @@ using Mita.Api.Common.Money;
 using Mita.Api.Common.Transactions;
 using Mita.Api.Common.Wire;
 using Mita.Domain.Categories;
+using Mita.Domain.Money;
 using Mita.Domain.Tags;
 using Mita.Domain.Transactions;
 using Mita.Domain.Users;
@@ -97,13 +98,19 @@ public sealed partial class ListTransactionsHandler(AppDbContext db, ICurrentUse
     {
         var looksLikeAmount = AmountSearch().IsMatch(search);
         var amountPrefix = search.Replace(',', '.');
+        var zeroDecimal = MinorUnits.ZeroDecimal.ToArray();
+        var threeDecimal = MinorUnits.ThreeDecimal.ToArray();
         return transactions.Where(transaction =>
             transaction.Title.ToLower().Contains(search)
             || (transaction.Note != null && transaction.Note.ToLower().Contains(search))
             || categories.Any(category => category.Id == transaction.CategoryId && category.Name.ToLower().Contains(search))
             || transactionTags.Any(link => link.TransactionId == transaction.Id && link.Tag.Name.ToLower().Contains(search))
             || (looksLikeAmount
-                && ((transaction.Amount / 100).ToString() + "." + (transaction.Amount % 100).ToString().PadLeft(2, '0'))
+                && (zeroDecimal.Contains(transaction.Currency)
+                        ? transaction.Amount.ToString()
+                        : threeDecimal.Contains(transaction.Currency)
+                            ? (transaction.Amount / 1000).ToString() + "." + (transaction.Amount % 1000).ToString().PadLeft(3, '0')
+                            : (transaction.Amount / 100).ToString() + "." + (transaction.Amount % 100).ToString().PadLeft(2, '0'))
                     .StartsWith(amountPrefix)));
     }
 #pragma warning restore CA1304, CA1305, CA1311, CA1862
@@ -131,6 +138,6 @@ public sealed partial class ListTransactionsHandler(AppDbContext db, ICurrentUse
         .ThenByDescending(transaction => transaction.CreatedAt)
         .ThenByDescending(transaction => transaction.Id);
 
-    [GeneratedRegex(@"^[0-9]+([.,][0-9]{0,2})?$")]
+    [GeneratedRegex(@"^[0-9]+([.,][0-9]{0,3})?$")]
     private static partial Regex AmountSearch();
 }

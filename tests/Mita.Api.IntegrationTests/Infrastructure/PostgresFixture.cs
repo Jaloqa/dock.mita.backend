@@ -9,7 +9,9 @@ namespace Mita.Api.IntegrationTests.Infrastructure;
 
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer container = new PostgreSqlBuilder("postgres:17-alpine").Build();
+    private readonly PostgreSqlContainer container = new PostgreSqlBuilder("postgres:17-alpine")
+        .WithCommand("-c", "max_connections=300")
+        .Build();
 
     public string ConnectionString => container.GetConnectionString();
 

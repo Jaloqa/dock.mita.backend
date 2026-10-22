@@ -4,7 +4,7 @@ namespace Mita.Api.Common.Rates;
 
 public static class ManualRate
 {
-    public const decimal Max = 1_000_000m;
+    public const decimal Max = 1_000_000_000m;
 
     public static bool TryParse(JsonElement? element, out decimal rate)
     {

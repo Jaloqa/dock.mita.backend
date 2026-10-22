@@ -49,7 +49,7 @@ public sealed class CreateTransactionValidatorTests
         { "rate", "0", "validation.invalidValue" },
         { "rate", "-1", "validation.invalidValue" },
         { "rate", "\"4\"", "validation.invalidValue" },
-        { "rate", "1000001", "validation.invalidValue" },
+        { "rate", "1000000001", "validation.invalidValue" },
         { "rate", "true", "validation.invalidValue" },
         { "tags", "\"a\"", "validation.invalidValue" },
         { "tags", "[\"" + new string('a', 31) + "\"]", "validation.tagTooLong" },
@@ -70,7 +70,7 @@ public sealed class CreateTransactionValidatorTests
         { "amount", "5.0" },
         { "currency", "\"PLN\"" },
         { "rate", "1e-9" },
-        { "rate", "1000000" },
+        { "rate", "1000000000" },
         { "rate", "null" },
         { "tags", "null" },
         { "tags", "[]" }

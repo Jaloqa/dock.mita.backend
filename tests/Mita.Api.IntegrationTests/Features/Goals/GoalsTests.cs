@@ -214,7 +214,7 @@ public sealed class GoalsTests(MitaApiFactory factory) : IClassFixture<MitaApiFa
         update.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await update.Content.ReadFromJsonAsync<JsonElement>(Ct);
         body.GetProperty("target").GetInt64().ShouldBe(200_000);
-        body.GetProperty("saved").GetInt64().ShouldBe(MinorUnits.Convert(300_000, ExchangeRate.Cross(1m, 4.25m)));
+        body.GetProperty("saved").GetInt64().ShouldBe(MinorUnits.Convert(300_000, ExchangeRate.Cross(1m, 4.25m), Currency.PLN, Currency.EUR));
         body.GetProperty("currency").GetString().ShouldBe("EUR");
 
         await using var scope = isolated.Services.CreateAsyncScope();

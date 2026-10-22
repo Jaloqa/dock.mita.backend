@@ -67,6 +67,6 @@ public static class BudgetReassignment
         }
 
         var rate = RateTable.Rate(await db.PlnValuesAsync(date, ct), budget.Currency, baseCurrency);
-        return rate is { } found ? Math.Max(1, MinorUnits.Convert(budget.Limit, found)) : null;
+        return rate is { } found ? Math.Max(1, MinorUnits.Convert(budget.Limit, found, budget.Currency, baseCurrency)) : null;
     }
 }

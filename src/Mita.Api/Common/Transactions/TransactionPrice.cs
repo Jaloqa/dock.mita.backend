@@ -23,14 +23,14 @@ public sealed record TransactionPrice(decimal Rate, long AccountAmount, long Bas
             return null;
         }
 
-        var accountAmount = MinorUnits.Convert(amount, accountRate);
+        var accountAmount = MinorUnits.Convert(amount, accountRate, currency, accountCurrency);
         if (currency == baseCurrency)
         {
             return new TransactionPrice(accountRate, accountAmount, amount);
         }
 
         return RateTable.Rate(plnValues, accountCurrency, baseCurrency) is { } baseRate
-            ? new TransactionPrice(accountRate, accountAmount, MinorUnits.Convert(accountAmount, baseRate))
+            ? new TransactionPrice(accountRate, accountAmount, MinorUnits.Convert(accountAmount, baseRate, accountCurrency, baseCurrency))
             : null;
     }
 }
