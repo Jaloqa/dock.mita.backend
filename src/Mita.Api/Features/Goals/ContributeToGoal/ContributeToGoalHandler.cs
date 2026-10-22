@@ -84,7 +84,7 @@ public sealed class ContributeToGoalHandler(AppDbContext db, ICurrentUser curren
             var source = accounts[fromId!.Value];
             var target = accounts[linkedAccountId];
 
-            var rate = await db.ResolveAsync(source.Currency, target.Currency, manualRate, date, cancellationToken);
+            var rate = await db.ResolveAsync(source.Currency, target.Currency, manualRate, date, today, cancellationToken);
             if (rate is null)
             {
                 return RatesUnavailable;
@@ -103,7 +103,7 @@ public sealed class ContributeToGoalHandler(AppDbContext db, ICurrentUser curren
 
             var toBase = target.Currency == baseCurrency
                 ? 1m
-                : RateTable.Rate(await db.PlnValuesAsync(date, cancellationToken), target.Currency, baseCurrency);
+                : RateTable.Rate(await db.FreshPlnValuesAsync(date, today, cancellationToken), target.Currency, baseCurrency);
             if (toBase is not { } baseRate)
             {
                 return RatesUnavailable;

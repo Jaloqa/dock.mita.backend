@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Mita.Api.Common.Rates;
+using Mita.Api.Common.Time;
 using Mita.Domain.Money;
 using Mita.Domain.Transactions;
 using Mita.Infrastructure.Persistence;
 
 namespace Mita.Api.Common.Transactions;
 
-public sealed class TransactionWriter(AppDbContext db)
+public sealed class TransactionWriter(AppDbContext db, TimeProvider time)
 {
     public async Task<Result<TransactionDetails>> PrepareAsync(
         Guid userId,
@@ -47,7 +48,7 @@ public sealed class TransactionWriter(AppDbContext db)
             return Error.Validation(errors);
         }
 
-        var plnValues = await db.PlnValuesAsync(input.Date, ct);
+        var plnValues = await db.FreshPlnValuesAsync(input.Date, UtcCalendar.Today(time), ct);
         var price = TransactionPrice.Compute(input.Amount, input.Currency, account.Currency, baseCurrency, input.ManualRate, plnValues);
         if (price is null)
         {

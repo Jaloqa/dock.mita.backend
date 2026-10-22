@@ -11,8 +11,6 @@ namespace Mita.Api.Features.Rates.GetRates;
 public sealed class GetRatesHandler(AppDbContext db)
     : IRequestHandler<GetRatesQuery, Result<IReadOnlyList<RateDto>>>
 {
-    private static readonly Currency[] AllCurrencies = Enum.GetValues<Currency>();
-
     public async Task<Result<IReadOnlyList<RateDto>>> Handle(GetRatesQuery query, CancellationToken cancellationToken)
     {
         if (!IsoDate.TryParse(query.Date, out var date))
@@ -20,10 +18,15 @@ public sealed class GetRatesHandler(AppDbContext db)
             throw new InvalidOperationException("The rates date must be validated before the handler runs.");
         }
 
-        var sources = CurrencyWire.TryParse(query.From, out var from) ? [from] : AllCurrencies;
-        var targets = CurrencyWire.TryParse(query.To, out var to) ? [to] : AllCurrencies;
+        if (!IsoDate.TryParse(query.Today, out var today))
+        {
+            throw new InvalidOperationException("The rates reference date must be a valid date.");
+        }
 
-        var plnValues = await db.PlnValuesAsync(date, cancellationToken);
+        var sources = CurrencyWire.TryParse(query.From, out var from) ? [from] : Currencies.All;
+        var targets = CurrencyWire.TryParse(query.To, out var to) ? [to] : Currencies.All;
+
+        var plnValues = await db.FreshPlnValuesAsync(date, today, cancellationToken);
         var wireDate = IsoDate.ToWire(date);
         var rates = new List<RateDto>();
         foreach (var source in sources)
