@@ -25,28 +25,79 @@ public sealed class RatesTests(MitaApiFactory factory) : IClassFixture<MitaApiFa
     }
 
     [Fact]
-    public async Task Should_ReturnTwelvePairs_When_NoFilter()
+    public async Task Should_Return400_When_NeitherFromNorTo()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        using var client = new AuthClient(isolated);
+        await client.RegisterNewAsync(Ct);
+
+        using var response = await client.Http.GetAsync($"{RatesPath}?date=2026-03-02", Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        body.GetProperty("errors").GetProperty("to")[0].GetString().ShouldBe("validation.required");
+    }
+
+    [Fact]
+    public async Task Should_ReturnEveryCurrency_When_OnlyToGiven()
     {
         await using var isolated = factory.WithIsolatedData();
         await TestData.AddRatesAsync(
             isolated,
-            (Currency.EUR, "2026-03-02", 4.27m),
-            (Currency.USD, "2026-03-02", 3.93m),
-            (Currency.UAH, "2026-03-02", 0.0912m));
+            [.. Currencies.Quoted.Select(currency => (currency, "2026-03-02", 2m))]);
 
-        var items = await GetAsync(isolated, "date=2026-03-02");
+        var items = await GetAsync(isolated, "date=2026-03-02&to=PLN");
 
-        items.Count.ShouldBe(12);
-        items.ShouldAllBe(item => item.From != item.To);
-        items.Select(item => (item.From, item.To)).ShouldBe(
-            [
-                ("PLN", "EUR"), ("PLN", "USD"), ("PLN", "UAH"),
-                ("EUR", "PLN"), ("EUR", "USD"), ("EUR", "UAH"),
-                ("USD", "PLN"), ("USD", "EUR"), ("USD", "UAH"),
-                ("UAH", "PLN"), ("UAH", "EUR"), ("UAH", "USD")
-            ]);
-        items.Single(item => item.From == "EUR" && item.To == "PLN").Value.ShouldBe(4.27);
-        items.ShouldAllBe(item => item.Date == "2026-03-02");
+        items.Count.ShouldBe(147);
+        items.ShouldAllBe(item => item.From != item.To && item.To == "PLN");
+        items.Select(item => item.From).Distinct().Count().ShouldBe(147);
+    }
+
+    [Fact]
+    public async Task Should_UseWeeklyRate_When_TableBCurrencyOnOtherDay()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.KWD, "2026-10-21", 12.6221m));
+
+        var items = await GetAsync(isolated, "date=2026-10-26&from=KWD&to=PLN");
+
+        items.Single().Value.ShouldBe(12.6221);
+    }
+
+    [Fact]
+    public async Task Should_OmitPair_When_RateOlderThan30Days()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.KWD, "2026-09-01", 12.6221m));
+
+        var stale = await GetAsync(isolated, "date=2026-10-02&from=KWD&to=PLN");
+        var fresh = await GetAsync(isolated, "date=2026-10-01&from=KWD&to=PLN");
+
+        stale.ShouldBeEmpty();
+        fresh.Single().Value.ShouldBe(12.6221);
+    }
+
+    [Fact]
+    public async Task Should_UseEarliestRate_When_TableBCurrencyDateBeforeHistory()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.KWD, "2026-03-04", 12.1m), (Currency.KWD, "2026-03-11", 12.3m));
+
+        var items = await GetAsync(isolated, "date=2020-01-01&from=KWD&to=PLN");
+
+        items.Single().Value.ShouldBe(12.1);
+    }
+
+    [Fact]
+    public async Task Should_UseTodayForStaleness_When_DateInFuture()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await TestData.AddRatesAsync(isolated, (Currency.KWD, IsoDate.ToWire(today.AddDays(-10)), 12.6221m));
+
+        var items = await GetAsync(isolated, $"date={IsoDate.ToWire(today.AddDays(200))}&from=KWD&to=PLN");
+
+        items.Single().Value.ShouldBe(12.6221);
     }
 
     [Fact]
@@ -64,10 +115,8 @@ public sealed class RatesTests(MitaApiFactory factory) : IClassFixture<MitaApiFa
         items[0].Value.ShouldBe(1.086514);
     }
 
-    [Theory]
-    [InlineData("2026-03-08")]
-    [InlineData("2027-01-01")]
-    public async Task Should_UseLatestEarlierRate_When_DateIsWeekendOrFuture(string date)
+    [Fact]
+    public async Task Should_UseLatestEarlierRate_When_DateIsWeekend()
     {
         await using var isolated = factory.WithIsolatedData();
         await TestData.AddRatesAsync(
@@ -75,11 +124,29 @@ public sealed class RatesTests(MitaApiFactory factory) : IClassFixture<MitaApiFa
             (Currency.EUR, "2026-03-05", 4.10m),
             (Currency.EUR, "2026-03-06", 4.27m));
 
-        var items = await GetAsync(isolated, $"date={date}&from=EUR&to=PLN");
+        var items = await GetAsync(isolated, "date=2026-03-08&from=EUR&to=PLN");
 
         items.Count.ShouldBe(1);
         items[0].Value.ShouldBe(4.27);
-        items[0].Date.ShouldBe(date);
+        items[0].Date.ShouldBe("2026-03-08");
+    }
+
+    [Fact]
+    public async Task Should_UseLatestEarlierRate_When_DateIsInFuture()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await TestData.AddRatesAsync(
+            isolated,
+            (Currency.EUR, IsoDate.ToWire(today.AddDays(-2)), 4.10m),
+            (Currency.EUR, IsoDate.ToWire(today.AddDays(-1)), 4.27m));
+        var future = IsoDate.ToWire(today.AddDays(200));
+
+        var items = await GetAsync(isolated, $"date={future}&from=EUR&to=PLN");
+
+        items.Count.ShouldBe(1);
+        items[0].Value.ShouldBe(4.27);
+        items[0].Date.ShouldBe(future);
     }
 
     [Fact]
@@ -113,10 +180,12 @@ public sealed class RatesTests(MitaApiFactory factory) : IClassFixture<MitaApiFa
     public async Task Should_DefaultToTodayUtc_When_DateOmitted()
     {
         await using var isolated = factory.WithIsolatedData();
-        await TestData.AddRatesAsync(isolated, (Currency.EUR, "2026-03-02", 4.27m));
+        await TestData.AddRatesAsync(
+            isolated,
+            (Currency.EUR, IsoDate.ToWire(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1)), 4.27m));
         var before = IsoDate.ToWire(DateOnly.FromDateTime(DateTime.UtcNow));
 
-        var items = await GetAsync(isolated);
+        var items = await GetAsync(isolated, "to=PLN");
 
         var after = IsoDate.ToWire(DateOnly.FromDateTime(DateTime.UtcNow));
         items.ShouldNotBeEmpty();

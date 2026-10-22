@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Mita.Api.Authentication;
 using Mita.Api.Common;
 using Mita.Api.Common.Rates;
+using Mita.Api.Common.Time;
 using Mita.Api.Common.Transfers;
 using Mita.Api.Common.Wire;
 using Mita.Domain.Accounts;
@@ -11,7 +12,7 @@ using Mita.Infrastructure.Persistence;
 
 namespace Mita.Api.Features.Transfers.CreateTransfer;
 
-public sealed class CreateTransferHandler(AppDbContext db, ICurrentUser currentUser)
+public sealed class CreateTransferHandler(AppDbContext db, ICurrentUser currentUser, TimeProvider time)
     : IRequestHandler<CreateTransferCommand, Result<TransferDto>>
 {
     public async Task<Result<TransferDto>> Handle(CreateTransferCommand command, CancellationToken cancellationToken)
@@ -47,7 +48,7 @@ public sealed class CreateTransferHandler(AppDbContext db, ICurrentUser currentU
         var from = locked.Single(account => account.Id == fromId);
         var to = locked.Single(account => account.Id == toId);
 
-        var rate = await db.ResolveAsync(from.Currency, to.Currency, manualRate, date, cancellationToken);
+        var rate = await db.ResolveAsync(from.Currency, to.Currency, manualRate, date, UtcCalendar.Today(time), cancellationToken);
         if (rate is null)
         {
             return Error.Unavailable("rates.unavailable");

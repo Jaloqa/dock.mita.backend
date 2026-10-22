@@ -365,6 +365,19 @@ public sealed class OverviewTests(MitaApiFactory factory) : IClassFixture<MitaAp
     }
 
     [Fact]
+    public async Task Should_ValueAccount_When_RateIsStale()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.KWD, Iso(Today.AddDays(-90)), 12m));
+        using var client = new AuthClient(isolated);
+        await client.RegisterNewAsync(Ct);
+        var userId = await UserIdAsync(client);
+        await TestData.AddAccountAsync(isolated, userId, Currency.KWD, 1_000);
+
+        Balance(await GetOverviewAsync(client, string.Empty)).ShouldBe((1_200L, 1));
+    }
+
+    [Fact]
     public async Task Should_Return503_When_BalanceNeedsMissingRate()
     {
         await using var isolated = factory.WithIsolatedData();

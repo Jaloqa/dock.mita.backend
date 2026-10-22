@@ -12,6 +12,8 @@ public sealed class ExchangeRate(Currency currency, DateOnly date, decimal plnVa
 
     public const int MaxDecimals = 12;
 
+    public const int MaxAgeDays = 30;
+
     public static decimal Round(decimal rate)
     {
         var decimals = 6;

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Mita.Api.Common.Wire;
 using Mita.Api.IntegrationTests.Infrastructure;
 using Mita.Domain.Money;
 using Mita.Infrastructure.Persistence;
@@ -118,6 +119,43 @@ public sealed class CreateTransactionTests(MitaApiFactory factory) : IClassFixtu
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
         body.GetProperty("accountAmount").GetInt64().ShouldBe(42_717);
         body.GetProperty("baseAmount").GetInt64().ShouldBe(10_869);
+    }
+
+    [Fact]
+    public async Task Should_Return503_When_EnteredCurrencyRateIsStale()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.KWD, "2026-01-21", 12.6221m));
+        using var client = new AuthClient(isolated);
+        await client.RegisterNewAsync(Ct);
+        var account = await CreateAccountAsync(client, "PLN");
+        var groceries = await CategoryIdAsync(client, "Groceries", "expense");
+
+        using var automatic = await PostAsync(client, Body(groceries, account, 1_000, currency: "KWD", date: "2026-03-02"));
+        using var manual = await PostAsync(client, Body(groceries, account, 1_000, currency: "KWD", rate: 12.5, date: "2026-03-02"));
+
+        automatic.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        var problem = await automatic.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        problem.GetProperty("code").GetString().ShouldBe("rates.unavailable");
+        manual.StatusCode.ShouldBe(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task Should_UseTodayForStaleness_When_DateInFuture()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await TestData.AddRatesAsync(isolated, (Currency.KWD, IsoDate.ToWire(today), 12.6221m));
+        using var client = new AuthClient(isolated);
+        await client.RegisterNewAsync(Ct);
+        var account = await CreateAccountAsync(client, "PLN");
+        var groceries = await CategoryIdAsync(client, "Groceries", "expense");
+
+        using var response = await PostAsync(
+            client,
+            Body(groceries, account, 1_000, currency: "KWD", date: IsoDate.ToWire(today.AddDays(200))));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
     }
 
     [Fact]
@@ -276,12 +314,13 @@ public sealed class CreateTransactionTests(MitaApiFactory factory) : IClassFixtu
         string currency = "PLN",
         double? rate = null,
         string? title = null,
-        string? note = null)
+        string? note = null,
+        string date = TransactionDate)
     {
         var body = new Dictionary<string, object?>
         {
             ["kind"] = kind,
-            ["date"] = TransactionDate,
+            ["date"] = date,
             ["categoryId"] = categoryId,
             ["accountId"] = accountId,
             ["amount"] = amount,

@@ -7,11 +7,16 @@ namespace Mita.Api.Features.Rates.GetRates;
 public sealed class GetRatesValidator : AbstractValidator<GetRatesQuery>
 {
     private const string InvalidValue = "validation.invalidValue";
+    private const string Required = "validation.required";
 
     public GetRatesValidator()
     {
         RuleFor(query => query.Date)
             .Must(value => IsoDate.TryParse(value, out _)).WithErrorCode(InvalidValue);
+
+        RuleFor(query => query.To)
+            .NotNull().WithErrorCode(Required)
+            .When(query => query.From is null && query.To is null);
 
         RuleFor(query => query.From)
             .Must(value => CurrencyWire.TryParse(value, out _)).WithErrorCode(InvalidValue)

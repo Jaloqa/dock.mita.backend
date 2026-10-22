@@ -177,6 +177,25 @@ public sealed class TransfersTests(MitaApiFactory factory) : IClassFixture<MitaA
     }
 
     [Fact]
+    public async Task Should_Return503_When_RateIsStale()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.KWD, "2026-01-21", 12.6221m));
+        using var client = new AuthClient(isolated);
+        await client.RegisterNewAsync(Ct);
+        var from = await CreateAccountAsync(client, "KWD");
+        var to = await CreateAccountAsync(client, "PLN");
+
+        using var automatic = await PostAsync(client, Body(from, to, 1_000));
+        using var manual = await PostAsync(client, Body(from, to, 1_000, rate: 12.5));
+
+        automatic.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        var problem = await automatic.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        problem.GetProperty("code").GetString().ShouldBe("rates.unavailable");
+        manual.StatusCode.ShouldBe(HttpStatusCode.Created);
+    }
+
+    [Fact]
     public async Task Should_ReturnFieldErrors_When_AccountsInvalid()
     {
         using var owner = new AuthClient(factory);
