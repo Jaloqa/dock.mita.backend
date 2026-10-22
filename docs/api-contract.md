@@ -66,7 +66,7 @@ type User = {
 };
 
 type Settings = {
-  baseCurrency: 'PLN' | 'EUR' | 'USD' | 'UAH';
+  baseCurrency: 'PLN' | 'EUR' | 'USD' | 'UAH'; // only these four, although Currency has 148 codes
   locale: 'en' | 'pl' | 'ru' | 'uk';
   monthStartDay: number | 'lastWorkingDay'; // integer from 1 to 28
   theme: 'system' | 'light' | 'dark';
@@ -85,14 +85,29 @@ type Page<T> = {
   total: number;
 };
 
-type Currency = 'PLN' | 'EUR' | 'USD' | 'UAH';
+// 148 ISO 4217 codes: PLN, EUR, USD and UAH, then every other currency of NBP tables A and B alphabetically (XDR is not one of them).
+// The rules for amounts, rates and the base currency are in "Accounts, transfers and rates".
+type Currency =
+  | 'PLN' | 'EUR' | 'USD' | 'UAH'
+  | 'AED' | 'AFN' | 'ALL' | 'AMD' | 'AOA' | 'ARS' | 'AUD' | 'AWG' | 'AZN' | 'BAM' | 'BBD' | 'BDT'
+  | 'BHD' | 'BIF' | 'BND' | 'BOB' | 'BRL' | 'BSD' | 'BWP' | 'BYN' | 'BZD' | 'CAD' | 'CDF' | 'CHF'
+  | 'CLP' | 'CNY' | 'COP' | 'CRC' | 'CUP' | 'CVE' | 'CZK' | 'DJF' | 'DKK' | 'DOP' | 'DZD' | 'EGP'
+  | 'ERN' | 'ETB' | 'FJD' | 'GBP' | 'GEL' | 'GHS' | 'GIP' | 'GMD' | 'GNF' | 'GTQ' | 'GYD' | 'HKD'
+  | 'HNL' | 'HTG' | 'HUF' | 'IDR' | 'ILS' | 'INR' | 'IQD' | 'IRR' | 'ISK' | 'JMD' | 'JOD' | 'JPY'
+  | 'KES' | 'KGS' | 'KHR' | 'KMF' | 'KRW' | 'KWD' | 'KZT' | 'LAK' | 'LBP' | 'LKR' | 'LRD' | 'LSL'
+  | 'LYD' | 'MAD' | 'MDL' | 'MGA' | 'MKD' | 'MMK' | 'MNT' | 'MOP' | 'MRU' | 'MUR' | 'MVR' | 'MWK'
+  | 'MXN' | 'MYR' | 'MZN' | 'NAD' | 'NGN' | 'NIO' | 'NOK' | 'NPR' | 'NZD' | 'OMR' | 'PAB' | 'PEN'
+  | 'PGK' | 'PHP' | 'PKR' | 'PYG' | 'QAR' | 'RON' | 'RSD' | 'RUB' | 'RWF' | 'SAR' | 'SBD' | 'SCR'
+  | 'SDG' | 'SEK' | 'SGD' | 'SLE' | 'SOS' | 'SRD' | 'SSP' | 'STN' | 'SVC' | 'SYP' | 'SZL' | 'THB'
+  | 'TJS' | 'TMT' | 'TND' | 'TOP' | 'TRY' | 'TTD' | 'TWD' | 'TZS' | 'UGX' | 'UYU' | 'UZS' | 'VES'
+  | 'VND' | 'VUV' | 'WST' | 'XAF' | 'XCD' | 'XCG' | 'XOF' | 'XPF' | 'YER' | 'ZAR' | 'ZMW' | 'ZWG';
 
 type Account = {
   id: string;             // GUID
   name: string;
   type: 'card' | 'cash' | 'savings';
   currency: Currency;
-  openingBalance: number; // minor units
+  openingBalance: number; // minor units of the account currency
   balance: number;        // minor units, computed by the server: openingBalance plus every transfer leg plus every transaction (income adds, expense subtracts, in the account currency)
   cardLast4: string | null;
   archived: boolean;
@@ -104,7 +119,7 @@ type AccountInput = {
   name: string;           // 1 to 40 characters after trimming, no control characters
   type: 'card' | 'cash' | 'savings';
   currency: Currency;
-  openingBalance: number; // integer minor units, absolute value up to 100000000000
+  openingBalance: number; // integer minor units of the account currency, absolute value up to 100000000000
   cardLast4?: string | null; // exactly 4 digits; stored only for type "card"
   archived?: boolean;        // omitted on update keeps the current value
 };
@@ -116,7 +131,7 @@ type Transfer = {
   toAccountId: string;
   fromAmount: number;     // minor units of the source account currency
   toAmount: number;       // minor units of the target account currency
-  rate: number;           // 1 for the same currency
+  rate: number;           // major units of the target currency per major unit of the source currency, 1 for the same currency
   note: string | null;
 };
 
@@ -124,8 +139,8 @@ type TransferInput = {
   date: string;           // YYYY-MM-DD, at most one year after today (UTC)
   fromAccountId: string;
   toAccountId: string;
-  fromAmount: number;     // integer minor units, 1 to 100000000000
-  rate?: number;          // manual rate, 0 < rate <= 1000000; not used for the same currency, but still validated
+  fromAmount: number;     // integer minor units of the source account currency, 1 to 100000000000
+  rate?: number;          // manual rate per major unit, 0 < rate <= 1000000000; not used for the same currency, but still validated
   note?: string | null;   // up to 200 characters after trimming
 };
 
@@ -133,7 +148,7 @@ type Rate = {
   date: string;           // YYYY-MM-DD, the requested date (today in UTC when omitted)
   from: Currency;
   to: Currency;
-  value: number;          // units of "to" per 1 unit of "from"
+  value: number;          // major units of "to" per 1 major unit of "from", for example 0.024764 for JPY to PLN
 };
 
 type CategoryKind = 'expense' | 'income';
@@ -164,7 +179,7 @@ type Transaction = {
   amount: number;         // minor units of the entered currency
   currency: Currency;     // the entered currency
   accountAmount: number;  // minor units of the account currency
-  rate: number;           // entered currency to account currency, 1 for the same currency
+  rate: number;           // entered currency to account currency per major unit, 1 for the same currency
   baseAmount: number;     // minor units of the current base currency
   tags: TransactionTag[]; // ordered by lower-case name, then id; [] when none
 };
@@ -181,9 +196,9 @@ type TransactionInput = {
   note?: string | null;   // up to 200 characters after trimming
   categoryId: string;
   accountId: string;
-  amount: number;         // integer minor units, 1 to 100000000000
+  amount: number;         // integer minor units of `currency`, 1 to 100000000000
   currency: Currency;     // any supported currency, converted into the account currency
-  rate?: number;          // manual rate, 0 < rate <= 1000000; not used for the same currency, but still validated
+  rate?: number;          // manual rate per major unit, 0 < rate <= 1000000000; not used for the same currency, but still validated
   tags?: string[];        // tag names, each 1 to 30 characters after trimming with no control characters, at most 10 distinct; missing or null means no tags
 };
 
@@ -271,10 +286,10 @@ type GoalPage = Page<Goal> & {
 };
 
 type GoalContributionInput = {
-  amount: number;         // integer minor units, 1 to 100000000000
+  amount: number;         // integer minor units, 1 to 100000000000: of the base currency for a goal without an account, of the source account currency otherwise
   date: string;           // YYYY-MM-DD, at most one year after today (UTC)
   fromAccountId?: string; // required when the goal is linked to an account
-  rate?: number;          // manual rate, 0 < rate <= 1000000; used only for a linked goal in another currency, but still validated
+  rate?: number;          // manual rate per major unit, 0 < rate <= 1000000000; used only for a linked goal in another currency, but still validated
 };
 
 type Overview = {
@@ -474,14 +489,14 @@ Every error is an RFC 9457 `application/problem+json` document:
 
 | Code | Meaning |
 | --- | --- |
-| `validation.required` | the field is missing, null or blank, including the `name` of `PUT /v1/tags/{id}`. Goal `deadline` and `accountId` and contribution `rate` are optional, and `fromAccountId` is required only for a linked goal |
+| `validation.required` | the field is missing, null or blank, including the `name` of `PUT /v1/tags/{id}`. Goal `deadline` and `accountId` and contribution `rate` are optional, and `fromAccountId` is required only for a linked goal. `GET /v1/rates` needs at least one of `from` and `to`: when both are missing, `to` is reported (field `to`) |
 | `validation.invalidEmail` | the email is not a valid address. On login it is returned only when the email contains a control character |
 | `validation.emailTaken` | register, or `PUT /v1/me`: another account uses this email |
 | `validation.nameTooLong` | the name is longer than 40 characters after trimming (users, accounts, categories and goals) |
 | `validation.passwordTooShort` | register: fewer than 10 characters |
 | `validation.passwordTooLong` | register: more than 128 characters |
 | `validation.invalidPassword` | `DELETE /v1/me`: the password is wrong, or the account is locked after repeated failures (field `password`) |
-| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value, a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 (reported under `rate`). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers, and for `tags` a value that is not an array, an element that is not a string, and an element that is blank or contains a control character (checked before `tagTooLong` and `tooManyTags`). On tags it covers a `name` that is not a string or contains a control character. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `tagIds`, `date`, `from`, `to`, `kind`, `sort`, budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive) or report `range` (anything but `3m`, `6m` or `12m`) |
+| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency (anything but exactly three upper-case letters naming one of the 148 supported codes, so `jpy`, ` JPY` and `XDR` are refused), a `baseCurrency` other than PLN, EUR, USD or UAH, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value (minor units of its own currency), a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 minor units of the target account currency (reported under `rate`, also when the product is too large to represent). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers, and for `tags` a value that is not an array, an element that is not a string, and an element that is blank or contains a control character (checked before `tagTooLong` and `tooManyTags`). On tags it covers a `name` that is not a string or contains a control character. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `tagIds`, `date`, `from`, `to`, `kind`, `sort`, budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive) or report `range` (anything but `3m`, `6m` or `12m`) |
 | `validation.currencyLocked` | `PUT /v1/accounts/{id}`: the currency of an account that is in use cannot change (field `currency`) |
 | `validation.cardLast4` | `cardLast4` is present, not blank and not exactly 4 digits. Checked for every account type |
 | `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers or transactions, so it can only be archived (field `id`) |
@@ -520,7 +535,7 @@ Every error is an RFC 9457 `application/problem+json` document:
 | 409 | `goal.concurrentUpdate` | `POST /v1/goals/{id}/contributions` | the goal was linked to another account (or unlinked) by another request while the contribution was processed. Nothing is written. Reload the goal and retry |
 | 429 | title "Too many requests" | `/v1/auth/*` and `DELETE /v1/me` | rate limit exceeded. The `Retry-After` header holds the wait in seconds. On refresh it does not mean the session ended: wait and retry |
 | 500 | title "Server error" | any | unexpected failure. Report the `correlationId` |
-| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `DELETE /v1/categories/{id}`, `GET /v1/overview` | a conversion that needs an exchange rate that is not stored yet: a cross-currency transfer, transaction or contribution without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions and contributions can also send a manual `rate` (only for the entered-to-account conversion). On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500. On `GET /v1/overview` it is returned when the balance, a budget or a goal needs a rate that is not stored |
+| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `DELETE /v1/categories/{id}`, `GET /v1/overview` | a conversion that needs an exchange rate that is not stored yet, or whose newest stored rate is older than 30 days (see Rates): a cross-currency transfer, transaction or contribution without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions and contributions can also send a manual `rate` (only for the entered-to-account conversion, never for the account-to-base one). A stale rate is refused only on the automatic conversions of transfers, transactions and contributions. The base currency change and every read value stored data with the latest stored rate whatever its age. On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500. On `GET /v1/overview` it is returned when the balance, a budget or a goal needs a rate that is not stored |
 
 ### Rate limiting and lockout
 
@@ -535,11 +550,26 @@ After 5 failed password attempts the account is locked for 15 minutes. Failures 
 
 ## Accounts, transfers and rates
 
-All amounts are integers in minor units (grosze, cents). The absolute value of an amount is at most 100000000000. JSON numbers with a zero fraction, such as `5.0`, count as integers. Every account and transfer belongs to the current user, and an id of another user answers exactly like an unknown id (404).
+All amounts are integers in the minor units of their currency, as ISO 4217 defines them: grosze and cents for most currencies, whole yen for JPY, thousandths of a dinar for KWD. A currency has 0, 2 or 3 fraction digits:
+
+- 0 digits (16 currencies): `BIF`, `CLP`, `DJF`, `GNF`, `ISK`, `JPY`, `KMF`, `KRW`, `PYG`, `RWF`, `UGX`, `VND`, `VUV`, `XAF`, `XOF`, `XPF`;
+- 3 digits (7 currencies): `BHD`, `IQD`, `JOD`, `KWD`, `LYD`, `OMR`, `TND`;
+- 2 digits: every other currency, including PLN, EUR, USD and UAH.
+
+The absolute value of an amount is at most 100000000000 minor units of its own currency: 1000000000.00 in a 2-digit currency, 100000000.000 in KWD and 100000000000 in JPY. JSON numbers with a zero fraction, such as `5.0`, count as integers. Every account and transfer belongs to the current user, and an id of another user answers exactly like an unknown id (404).
 
 Validation reports the first failing rule for each field and returns all failing fields in one 400. A body field of the wrong JSON type gives a field error, for example `openingBalance: ["validation.invalidValue"]`, not an error under `body`. A whitespace-only string counts as missing (`validation.required`).
 
 Validation runs before the lookup. An invalid body sent to an unknown account id answers 400, and only a valid body gives 404 for an unknown or foreign id.
+
+Currencies and conversion:
+
+- `Currency` is one of 148 codes: PLN, EUR, USD, UAH and the 144 other currencies of NBP tables A and B, listed in the type above. XDR (the IMF unit of account) is not one of them. A code is exactly three upper-case ASCII letters, and anything else is `validation.invalidValue`. Accounts and the entered currency of a transaction accept every code.
+- The base currency stays one of PLN, EUR, USD and UAH. `PUT /v1/settings` with any other code, supported or not, answers `baseCurrency: ["validation.invalidValue"]`.
+- A rate is always per major unit, as NBP publishes it: 1 JPY = 0.024764 PLN is the rate `0.024764`. Minor units are converted with `round(minor * rate * 10^(exponent(to) - exponent(from)))`, where the exponent is the number of fraction digits above and `round` is half away from zero to a whole minor unit of the target currency. So 1500 JPY at 0.024764 into PLN is 3715 grosze (37.15 PLN), and 1250 KWD minor units (1.250 KWD) at 12.6221 into PLN are 1578 grosze.
+- The rate rounding rule: rates are rounded to 6 decimals, half away from zero. A rate below 0.1 keeps one more decimal for every zero after the decimal point (6 significant digits, at most 12 decimals): `0.024764` stays, `0.00000212` stays and `1.2345678` becomes `1.234568`. The rule applies to stored NBP values, to cross rates and to manual rates, so a tiny rate such as IRR or VND against PLN never collapses to 0.
+- A manual `rate` is a JSON number with `0 < rate <= 1000000000` (KWD to IRR is about 6000000). It is rounded by the rule above before it is used and stored.
+- The amount a write produces in the target currency (`toAmount` of a transfer or contribution, `accountAmount` of a transaction) is held to the same limit, in minor units of that currency. A larger product, or one too large to represent at all, answers `rate: ["validation.invalidValue"]` and never a 500.
 
 ### Accounts
 
@@ -553,18 +583,21 @@ Validation runs before the lookup. An invalid body sent to an unknown account id
 
 - `GET /v1/transfers`: `pageSize` defaults to 20 (maximum 100). `accountId` matches transfers on either side. A value that is not a GUID answers 400 `accountId: ["validation.invalidValue"]`. Transfers are ordered newest first (`date`, then creation time).
 - Transfers cannot be edited or deleted.
-- For accounts in the same currency the `rate` is 1 and `toAmount` equals `fromAmount`. Otherwise the server uses the manual `rate` when sent, and the exchange rate of the transfer `date` when not. `toAmount` is `fromAmount` times the rate, rounded to a whole minor unit (half away from zero). A manual rate is rounded to 6 decimals first.
-- A manual `rate` must be a JSON number with `0 < rate <= 1000000`. A converted amount that rounds to 0 answers `rate: ["validation.positiveAmount"]`. A converted amount above 100000000000 answers `rate: ["validation.invalidValue"]`.
+- For accounts in the same currency the `rate` is 1 and `toAmount` equals `fromAmount`. Otherwise the server uses the manual `rate` when sent, and the exchange rate of the transfer `date` when not. `toAmount` is `fromAmount` converted with the formula above, rounded to a whole minor unit of the target currency (half away from zero). A manual rate is rounded by the rate rounding rule first.
+- A manual `rate` must be a JSON number with `0 < rate <= 1000000000`. A converted amount that rounds to 0 answers `rate: ["validation.positiveAmount"]`. A converted amount above 100000000000 minor units of the target currency answers `rate: ["validation.invalidValue"]`.
 - A transfer stores its `rate` and `toAmount`. They never change when exchange rates change later.
-- Without a manual rate and without any stored exchange rates the answer is 503 with code `rates.unavailable`.
+- Without a manual rate, a transfer between two currencies needs a usable rate for each of them (PLN needs none). When one is not stored, or is stale (see Rates), the answer is 503 with code `rates.unavailable`. A manual rate always works.
 
 ### Rates
 
-- Rates come from the National Bank of Poland (NBP, table A mid rates) for PLN, EUR, USD and UAH. A background job in the API loads them on start and every 6 hours, and requests never call NBP. The first run backfills about 183 days. If NBP is unreachable, the API keeps serving the stored rates.
-- `GET /v1/rates` returns a plain array, not a `Page`. This is the one exception to "every collection is paginated": there are at most 12 pairs.
-- `date`, `from` and `to` are all optional. An omitted `date` means today's UTC date, and every `Rate` echoes the requested or resolved date in `date`. Without `from` and `to` every currency pair is returned, never a pair with `from == to`.
-- For a date, the rate of each currency is the latest stored one on or before that date. For weekends, holidays and future dates that is the latest earlier rate, and for a date before the history start it is the earliest stored rate. Cross rates go through PLN and are rounded to 6 decimals.
-- Pairs whose currencies have no stored rate are omitted, so the array can be empty right after the first start.
+- Rates come from the National Bank of Poland (NBP) as mid rates against PLN. Table A (31 currencies, published every business day) and table B (the other 116, published weekly) together cover the 147 currencies other than PLN. XDR, which NBP lists in table A, is ignored without a warning. Any other code that is not supported (for example a currency NBP adds later) is skipped, with one warning in the log per code per sync.
+- A background job in the API loads the tables, table A first and then table B, on start and every 6 hours, and requests never call NBP. Each table has its own start: the day after the latest stored date among its currencies, or the whole history window (`Rates:HistoryDays`, 183 days) when any currency of the table has no stored rate yet. The first run therefore backfills about 183 days of both tables, and the first run after an upgrade backfills the currencies that were added. One table failing does not stop the other. If NBP is unreachable, the API keeps serving the stored rates.
+- `GET /v1/rates` returns a plain array, not a `Page`. This is the one exception to "every collection is paginated": there are at most 147 pairs.
+- `date`, `from` and `to` are optional, except that at least one of `from` and `to` is required: without both the answer is 400 `to: ["validation.required"]`. An omitted `date` means today's UTC date, and every `Rate` echoes the requested or resolved date in `date`. With only `from` the array holds that currency against every other one, with only `to` every other currency against it, and with both at most one pair. A pair with `from == to` is never returned.
+- For a date, the rate of each currency is the latest stored one on or before that date. For weekends, holidays and future dates that is the latest earlier rate, and for a date before the history start it is the earliest stored rate of that currency. Table B is weekly, so on any day of the week a table B currency reads the rate of its latest publication on or before that day. Cross rates go through PLN and are rounded by the rate rounding rule.
+- A rate older than 30 days counts as missing when it is used by `GET /v1/rates` and by the automatic conversions of writes (transfers, transactions and goal contributions without a manual rate, and every account-to-base conversion). The age is measured against `min(date, today)`: a rate dated more than 30 days before that day is stale, and one dated exactly 30 days before is not. The earliest-rate fallback for a date before the history start is never stale. A currency that NBP stopped publishing therefore leaves `GET /v1/rates` and answers 503 `rates.unavailable` on automatic conversions once its last rate is older than 30 days, while a manual `rate` still works for the entered-to-account step.
+- The staleness rule never applies to reads that value stored data: the overview balance, budgets, goals, the base currency change, copying budgets and moving budgets when a category is deleted use the latest stored rate whatever its age, so a delisted currency never breaks a read.
+- Pairs where a currency has no usable rate (not stored, or stale) are omitted, so the array can be empty right after the first start.
 - Today's rates are cached for up to an hour, are the same for every user, and the sync invalidates them; any other date is read from the database on every request.
 
 ## Categories and transactions
@@ -587,20 +620,20 @@ Every category and transaction belongs to the current user, and an id of another
 
 - `GET /v1/transactions`: `pageSize` defaults to 20 (maximum 100). The answer is a `TransactionPage`: the usual `Page` fields plus `sum` and `currency`.
 - Filters, all optional and combined with AND: `kind`, `categoryId`, `accountId`, `tagIds`, `from` and `to` (both inclusive, `YYYY-MM-DD`) and `search`. An unknown `kind` or `sort`, a `from` or `to` that is not a real date, or a `categoryId` or `accountId` that is not a GUID answers 400 with `validation.invalidValue` under the parameter name. `tagIds` is a comma-separated list of at most 10 tag ids (see Tags), and a list with a non-GUID element or with more than 10 elements answers `tagIds: ["validation.invalidValue"]`. `from` later than `to` is not an error and gives an empty page. The server does not know financial periods: the client turns a period into `from` and `to`.
-- `search` is trimmed and compared case-insensitively as literal text, so `%`, `_` and `\` are plain characters. A transaction matches when its `title`, its `note`, the name of its category or the name of one of its tags contains the text. When the text also looks like an amount (digits, optionally followed by `.` or `,` and up to two digits), a transaction matches too when its entered `amount` written as `units.cc` starts with it, reading a comma as a dot. For example `12,5` matches 1250 (`12.50`) and 12500 (`125.00`) does not. An empty search is ignored.
+- `search` is trimmed and compared case-insensitively as literal text, so `%`, `_` and `\` are plain characters. A transaction matches when its `title`, its `note`, the name of its category or the name of one of its tags contains the text. When the text also looks like an amount (digits, optionally followed by `.` or `,` and up to three digits), a transaction matches too when its entered `amount` written with the fraction digits of its entered currency starts with it, reading a comma as a dot: `1500` for a 0-digit currency such as JPY, `12.500` for a 3-digit one such as KWD and `12.50` for the rest. For example `12,5` matches 1250 PLN minor units (`12.50`) and 12500 (`125.00`) does not, `12.5` matches 12500 KWD minor units (`12.500`), and `15` matches 1500 JPY. An empty search is ignored.
 - `sort` is one of `-date` (default), `date`, `-amount` and `amount`. `-date` is newest first: `date`, then creation time, then `id`, all descending. `date` is the same order reversed. `amount` sorts by `baseAmount` (not by the entered amount), ascending for `amount` and descending for `-amount`, and ties fall back to the `-date` order. Editing a transaction keeps its creation time.
 - `sum` is the signed total in the base currency over every transaction that matches the filters, not only the page: `+baseAmount` for income and `-baseAmount` for expense. It is 0 for an empty result. `currency` is the base currency the `sum` and every `baseAmount` are in.
 - `POST` and `PUT` take the account, the category and the entered `amount` and `currency`. The server stores `rate`, `accountAmount` and `baseAmount` with the transaction:
-  - `rate` is 1 when `currency` equals the account currency (a sent `rate` is still validated, then ignored). Otherwise it is the manual `rate` rounded to 6 decimals when sent, and the exchange rate of the transaction `date` when not.
-  - `accountAmount` is `amount` times `rate`, rounded half away from zero to a whole minor unit.
+  - `rate` is 1 when `currency` equals the account currency (a sent `rate` is still validated, then ignored). Otherwise it is the manual `rate` rounded by the rate rounding rule when sent, and the exchange rate of the transaction `date` when not.
+  - `accountAmount` is `amount` converted into the account currency with the formula above, rounded half away from zero to a whole minor unit of the account currency. A 1500 JPY expense on a PLN account at 0.024764 stores `accountAmount` 3715.
   - `baseAmount` is `amount` when `currency` is the base currency. Otherwise it is `accountAmount` converted from the account currency into the base currency at the exchange rate of the `date`, rounded the same way.
-  - A converted `accountAmount` that rounds to 0 answers `rate: ["validation.positiveAmount"]`, and one above 100000000000 answers `rate: ["validation.invalidValue"]`.
-  - A manual `rate` must be a JSON number with `0 < rate <= 1000000`.
-  - A rate that is needed but not stored answers 503 `rates.unavailable`.
+  - A converted `accountAmount` that rounds to 0 answers `rate: ["validation.positiveAmount"]`, and one above 100000000000 minor units of the account currency answers `rate: ["validation.invalidValue"]`.
+  - A manual `rate` must be a JSON number with `0 < rate <= 1000000000`. It replaces only the entered-to-account rate: the account-to-base rate is always the exchange rate of the `date`.
+  - A rate that is needed but not stored, or is stale (see Rates), answers 503 `rates.unavailable`.
 - `tags` is optional and takes tag names (see Tags). `PUT` replaces the whole set, as it does for `title`, so a `PUT` without `tags` removes the tags of the transaction.
 - `title` is optional, stored trimmed, and is `""` when missing or blank. `note` is stored trimmed and is `null` when missing or blank. The limits are 100 and 200 characters after trimming (`validation.titleTooLong`, `validation.noteTooLong`).
 - `categoryId` must be a category of the user that is not the `transfer` category, and its kind must equal the transaction `kind` (`validation.categoryKindMismatch`). `accountId` must be an account of the user and not archived, except that `PUT` may keep the account the transaction already has even when it was archived since.
-- A stored transaction never changes when exchange rates change later. Only a change of the base currency rewrites `baseAmount`: `PUT /v1/settings` with a new `baseCurrency` recomputes `baseAmount` of every transaction of the user at the exchange rate of its own date, exactly as a new transaction would be priced, and the `sum`, the `amount` sort and every `baseAmount` are then in the new currency. If a currency used by the transactions has no stored rate at all, the answer is 503 `rates.unavailable` and nothing changes.
+- A stored transaction never changes when exchange rates change later. Only a change of the base currency rewrites `baseAmount`: `PUT /v1/settings` with a new `baseCurrency` recomputes `baseAmount` of every transaction of the user at the exchange rate of its own date, exactly as a new transaction would be priced (same formula and rate rounding, but a stored rate is used whatever its age), and the `sum`, the `amount` sort and every `baseAmount` are then in the new currency. If a currency used by the transactions has no stored rate at all, the answer is 503 `rates.unavailable` and nothing changes.
 - `GET /v1/transactions/{id}` answers 404 for an unknown or foreign id. `POST` answers 201 with `Location: /v1/transactions/{id}`, `PUT` 200 and `DELETE` 204.
 - Transactions change `balance` and `inUse` of the account and `inUse` of the category. Deleting a transaction restores the balance.
 
@@ -635,7 +668,7 @@ Every budget and goal belongs to the current user, and an id of another user ans
 ### Budgets
 
 - `GET /v1/budgets`: `pageSize` defaults to 100 (maximum 100). An invalid `period`, `page` or `pageSize` answers 400 `invalidValue` under the parameter name. Budgets are ordered by creation order (a copy keeps the order of its source). `summary` covers every budget of the period, not only the page.
-- `limit` is stored in the base currency of the moment it was written. After a base currency change the response shows it converted at the rate of the period start, `round(limit * rate)`, with the rate rounded to 6 decimals and half away from zero.
+- `limit` is stored in the base currency of the moment it was written. After a base currency change the response shows it converted at the rate of the period start, `round(limit * rate)`, with the rate rounded by the rate rounding rule and the result half away from zero.
 - `status` is `over_budget` when `spent > limit`, `almost_spent` when `spent` is at least 85% of `limit`, otherwise `on_track`. `perDay` is `floor(remaining / daysLeft)` when both are positive, otherwise `null`.
 - `POST` answers 201 with `Location: /v1/budgets/{id}`. There is no `GET /v1/budgets/{id}`. `PUT` answers 200 with the budget and replaces `categoryId`, `period` and `limit` (the limit is taken as base currency). `DELETE` answers 204.
 - Checks on `categoryId`, in this order: required, then a GUID (otherwise `unknownCategory`), then the category must be one of the user's expense categories that is not `transfer` (`unknownCategory`; an income category answers `expenseCategoryOnly`), then `budgetExists` when the period is valid. One budget exists per category and period.
@@ -655,7 +688,7 @@ Every budget and goal belongs to the current user, and an id of another user ans
 
 - `POST /v1/goals/{id}/contributions` answers 200 with the updated `Goal`, not with the contribution, and no `Location` header. An unknown or foreign goal answers 404 once the body validated.
 - A goal without a linked account moves no money: `amount` is in the base currency and is added to `saved`. `fromAccountId` is optional there, but validated when sent.
-- A goal with a linked account needs `fromAccountId` (an unarchived account of the user, other than the linked one) and creates a transfer from it to the linked account with `note` equal to the goal name. The rules of transfers apply: the same currency gives rate 1, otherwise the manual `rate` (rounded to 6 decimals), otherwise the stored rate of `date`; `rate: ["validation.positiveAmount"]` and `rate: ["validation.invalidValue"]` for a converted amount that rounds to 0 or is too large; 503 `rates.unavailable` when a rate is missing. The transfer appears in `GET /v1/transfers` and changes both balances.
+- A goal with a linked account needs `fromAccountId` (an unarchived account of the user, other than the linked one) and creates a transfer from it to the linked account with `note` equal to the goal name. The rules of transfers apply: the same currency gives rate 1, otherwise the manual `rate` (rounded by the rate rounding rule), otherwise the stored rate of `date`; `rate: ["validation.positiveAmount"]` and `rate: ["validation.invalidValue"]` for a converted amount that rounds to 0 or is too large; 503 `rates.unavailable` when a rate is missing or stale, including the rate between the linked account and the base currency, which a manual `rate` never replaces. The transfer appears in `GET /v1/transfers` and changes both balances.
 - `saved` grows by the amount received by the linked account, valued in the base currency at the rate of `date`.
 - If the goal is linked to another account or unlinked by another request while the contribution runs, nothing is written and the answer is 409 `goal.concurrentUpdate`.
 
@@ -673,7 +706,7 @@ Both endpoints count the transactions of the user dated inside a range (both day
 - Ranges: `week` is the last 7 days ending today (`from` is today minus 6), and the previous range is the 7 days before it. `month` is the financial period of today, and the previous range is the period before it. `year` is the 12 financial periods ending with the period of today, and the previous range is the 12 periods before them.
 - `income.change` and `expense.change` compare the amount with the previous range: `round((current - previous) * 100 / previous)` to one decimal, with halves rounded towards positive infinity, and a drop is negative. They are `null` when the previous amount is 0, and never `-0`. `averageExpense` is `expense.amount / expense.count` rounded half away from zero, `null` without expenses.
 - `spending` is the expense per category inside the range, largest first (ties by name), without the `transfer` category. Only categories with spending above 0 are listed. The five largest become slices. Every other category, and the `other` category whatever its size, join one bucket with `categoryId: null` and `name: null`, appended last when its amount is above 0. `percent` is the share of the total with one decimal, split by the largest remainder so that the percents add up to exactly 100.0. Without expenses the list is empty.
-- `balance.amount` is the sum of the balances of every account except archived accounts whose balance is 0, each converted into the base currency at today's rate and rounded half away from zero. An archived account that still holds money counts. `balance.accounts` is the number of counted accounts.
+- `balance.amount` is the sum of the balances of every account except archived accounts whose balance is 0, each converted into the base currency at today's rate (the latest stored one, however old) and rounded half away from zero. An archived account that still holds money counts. `balance.accounts` is the number of counted accounts.
 - `month` is always the financial period of today, whatever the range: `planned` is the sum of the budget limits, `spent` the sum of the spent amounts, `left` their difference, and `budgets` the number of budgets.
 - `topBudgets` lists the budgets of that period by usage (`spent / limit`) descending, then by `spent` descending, then by creation order, at most 5. `name` is the category name, and the other fields are those of `Budget`.
 - `recent` lists the counted transactions of the range, newest first (`date`, then creation time, then `id`, all descending), at most 6. `amount` is the `baseAmount`.
