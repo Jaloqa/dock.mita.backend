@@ -48,7 +48,7 @@ public sealed class Transfer : IAuditable
         FromAccountId = from.Id,
         ToAccountId = to.Id,
         FromAmount = fromAmount,
-        ToAmount = MinorUnits.Convert(fromAmount, rate),
+        ToAmount = MinorUnits.Convert(fromAmount, rate, from.Currency, to.Currency),
         Rate = rate,
         Note = note
     };

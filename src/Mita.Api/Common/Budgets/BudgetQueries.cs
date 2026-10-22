@@ -59,7 +59,7 @@ public static class BudgetQueries
                     return null;
                 }
 
-                limit = MinorUnits.Convert(budget.Limit, found);
+                limit = MinorUnits.Convert(budget.Limit, found, budget.Currency, baseCurrency);
             }
 
             items.Add(BudgetView.From(budget, limit, spentByCategory.GetValueOrDefault(budget.CategoryId), daysLeft));

@@ -55,8 +55,8 @@ public sealed class Goal : IAuditable
 
     public void Rebase(Currency currency, decimal rate)
     {
-        Target = Math.Max(1, MinorUnits.Convert(Target, rate));
-        Saved = MinorUnits.Convert(Saved, rate);
+        Target = Math.Max(1, MinorUnits.Convert(Target, rate, Currency, currency));
+        Saved = MinorUnits.Convert(Saved, rate, Currency, currency);
         Currency = currency;
     }
 

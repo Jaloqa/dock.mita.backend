@@ -12,6 +12,6 @@ public sealed class ExchangeRateConfiguration : IEntityTypeConfiguration<Exchang
         builder.HasKey(rate => new { rate.Currency, rate.Date });
 
         builder.Property(rate => rate.Currency).HasConversion<string>().HasMaxLength(3);
-        builder.Property(rate => rate.PlnValue).HasPrecision(18, 6);
+        builder.Property(rate => rate.PlnValue).HasPrecision(24, 12);
     }
 }

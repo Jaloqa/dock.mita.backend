@@ -20,7 +20,7 @@ public sealed class TransferConfiguration : IEntityTypeConfiguration<Transfer>
         builder.HasKey(transfer => transfer.Id);
         builder.Property(transfer => transfer.Id).ValueGeneratedNever();
 
-        builder.Property(transfer => transfer.Rate).HasPrecision(18, 6);
+        builder.Property(transfer => transfer.Rate).HasPrecision(24, 12);
         builder.Property(transfer => transfer.Note).HasMaxLength(Transfer.NoteMaxLength);
 
         builder.HasIndex(transfer => new { transfer.UserId, transfer.Date });

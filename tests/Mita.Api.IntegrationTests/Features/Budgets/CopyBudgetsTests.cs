@@ -103,7 +103,7 @@ public sealed class CopyBudgetsTests(MitaApiFactory factory) : IClassFixture<Mit
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var items = await ListAsync(client, CurrentKey.ToString());
-        items.Single().GetProperty("limit").GetInt64().ShouldBe(MinorUnits.Convert(10_001, 4.25m));
+        items.Single().GetProperty("limit").GetInt64().ShouldBe(MinorUnits.Convert(10_001, 4.25m, Currency.EUR, Currency.PLN));
     }
 
     [Fact]

@@ -53,7 +53,7 @@ public static class GoalQueries
                 SELECT CASE WHEN bool_or(amount IS NULL) THEN NULL ELSE COALESCE(sum(amount), 0) END AS "Value"
                 FROM (
                     SELECT CASE WHEN "BaseCurrency" = {baseName} THEN "BaseAmount"::numeric
-                        ELSE round("BaseAmount" * round(pln_value("BaseCurrency", "Date") / pln_value({baseName}, "Date"), 6)) END AS amount
+                        ELSE round("BaseAmount" * round_rate(pln_value("BaseCurrency", "Date") / pln_value({baseName}, "Date"))) END AS amount
                     FROM goal_contributions
                     WHERE "UserId" = {userId} AND "Date" > {since} AND "Date" <= {today}
                 ) AS contributions

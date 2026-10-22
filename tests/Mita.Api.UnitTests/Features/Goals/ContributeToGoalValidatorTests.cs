@@ -27,7 +27,7 @@ public sealed class ContributeToGoalValidatorTests
         { "rate", "-1", "validation.invalidValue" },
         { "rate", "0", "validation.invalidValue" },
         { "rate", "\"4\"", "validation.invalidValue" },
-        { "rate", "1000001", "validation.invalidValue" },
+        { "rate", "1000000001", "validation.invalidValue" },
         { "fromAccountId", "\"acc_x\"", "validation.unknownAccount" },
         { "fromAccountId", "42", "validation.unknownAccount" }
     };
@@ -36,7 +36,7 @@ public sealed class ContributeToGoalValidatorTests
     {
         { "amount", "100000000000" },
         { "date", "\"2027-10-18\"" },
-        { "rate", "1000000" },
+        { "rate", "1000000000" },
         { "rate", "null" },
         { "fromAccountId", "null" },
         { "fromAccountId", "\"  \"" }

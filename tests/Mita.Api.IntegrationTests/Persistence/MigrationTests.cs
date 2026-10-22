@@ -61,6 +61,33 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
             connection);
         ((long)(await function.ExecuteScalarAsync(ct))!).ShouldBe(1);
 
+        await using var rateFunctions = new NpgsqlCommand(
+            "SELECT count(*) FROM pg_proc WHERE proname IN ('currency_exponent', 'round_rate')",
+            connection);
+        ((long)(await rateFunctions.ExecuteScalarAsync(ct))!).ShouldBe(2);
+
+        await using var rateColumns = new NpgsqlCommand(
+            """
+            SELECT table_name || '.' || column_name || ' ' || data_type || '(' || numeric_precision || ',' || numeric_scale || ')'
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND ((table_name = 'exchange_rates' AND column_name = 'PlnValue')
+                OR (table_name IN ('transactions', 'transfers') AND column_name = 'Rate'))
+            """,
+            connection);
+        var columns = new List<string>();
+        await using (var reader = await rateColumns.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                columns.Add(reader.GetString(0));
+            }
+        }
+
+        columns.ShouldBe(
+            ["exchange_rates.PlnValue numeric(24,12)", "transactions.Rate numeric(24,12)", "transfers.Rate numeric(24,12)"],
+            ignoreOrder: true);
+
         await using var index = new NpgsqlCommand(
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'IX_tags_user_name'",
             connection);

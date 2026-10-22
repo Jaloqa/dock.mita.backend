@@ -155,7 +155,7 @@ public sealed class BudgetWritesTests(MitaApiFactory factory) : IClassFixture<Mi
 
         using var list = await client.Http.GetAsync($"{BudgetsPath}?period={CurrentKey}", Ct);
         var item = (await list.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("items")[0];
-        item.GetProperty("limit").GetInt64().ShouldBe(MinorUnits.Convert(30_000, 4.25m));
+        item.GetProperty("limit").GetInt64().ShouldBe(MinorUnits.Convert(30_000, 4.25m, Currency.EUR, Currency.PLN));
     }
 
     [Fact]

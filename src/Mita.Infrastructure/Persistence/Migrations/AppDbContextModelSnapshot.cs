@@ -155,8 +155,8 @@ namespace Mita.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<decimal>("Rate")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                        .HasPrecision(24, 12)
+                        .HasColumnType("numeric(24,12)");
 
                     b.Property<Guid>("ToAccountId")
                         .HasColumnType("uuid");
@@ -401,8 +401,8 @@ namespace Mita.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("PlnValue")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                        .HasPrecision(24, 12)
+                        .HasColumnType("numeric(24,12)");
 
                     b.HasKey("Currency", "Date");
 
@@ -491,8 +491,8 @@ namespace Mita.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<decimal>("Rate")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                        .HasPrecision(24, 12)
+                        .HasColumnType("numeric(24,12)");
 
                     b.Property<string>("Title")
                         .IsRequired()

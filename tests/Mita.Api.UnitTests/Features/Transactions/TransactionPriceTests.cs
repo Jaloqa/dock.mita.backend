@@ -49,6 +49,33 @@ public sealed class TransactionPriceTests
             .ShouldBe(new TransactionPrice(1m, 1_000, 1_000));
 
     [Fact]
+    public void Should_ScaleToAccountDigits_When_JpyEnteredOnPlnAccount() =>
+        TransactionPrice.Compute(
+                1_500,
+                Currency.JPY,
+                Currency.PLN,
+                Currency.PLN,
+                null,
+                new Dictionary<Currency, decimal> { [Currency.PLN] = 1m, [Currency.JPY] = 0.024764m })
+            .ShouldBe(new TransactionPrice(0.024764m, 3_715, 3_715));
+
+    [Fact]
+    public void Should_ScaleToAccountDigits_When_KwdEnteredOnEurAccount()
+    {
+        var price = TransactionPrice.Compute(
+            1_250,
+            Currency.KWD,
+            Currency.EUR,
+            Currency.PLN,
+            null,
+            new Dictionary<Currency, decimal> { [Currency.PLN] = 1m, [Currency.KWD] = 12.6221m, [Currency.EUR] = 4.3685m });
+
+        price.ShouldNotBeNull();
+        price.Rate.ShouldBe(2.889344m);
+        price.AccountAmount.ShouldBe(361);
+    }
+
+    [Fact]
     public void Should_ReturnNull_When_EnteredCurrencyHasNoRate() =>
         TransactionPrice.Compute(10_000, Currency.EUR, Currency.PLN, Currency.PLN, null, new Dictionary<Currency, decimal> { [Currency.PLN] = 1m })
             .ShouldBeNull();

@@ -42,7 +42,7 @@ public sealed class CopyBudgetsHandler(AppDbContext db, ICurrentUser currentUser
             INSERT INTO budgets ("Id", "UserId", "CategoryId", "Period", "Limit", "Currency", "Position", "CreatedAt", "UpdatedAt")
             SELECT gen_random_uuid(), "UserId", "CategoryId", {target},
                 CASE WHEN "Currency" = {baseName} THEN "Limit"
-                    ELSE GREATEST(1, round("Limit" * round(pln_value("Currency", {sourceFrom}) / pln_value({baseName}, {sourceFrom}), 6))) END,
+                    ELSE GREATEST(1, round("Limit" * round_rate(pln_value("Currency", {sourceFrom}) / pln_value({baseName}, {sourceFrom})))) END,
                 {baseName},
                 row_number() OVER (ORDER BY "CreatedAt", "Position", "Id") - 1,
                 now(), now()

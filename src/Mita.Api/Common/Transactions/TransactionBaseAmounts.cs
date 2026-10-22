@@ -29,7 +29,8 @@ public static class TransactionBaseAmounts
             UPDATE transactions t
             SET "BaseAmount" = CASE
                 WHEN t."Currency" = {target} THEN t."Amount"
-                ELSE round(t."AccountAmount" * round(pln_value(a."Currency", t."Date") / pln_value({target}, t."Date"), 6))
+                ELSE round(t."AccountAmount" * round_rate(pln_value(a."Currency", t."Date") / pln_value({target}, t."Date"))
+                    * power(10::numeric, currency_exponent({target}) - currency_exponent(a."Currency")))
             END
             FROM accounts a
             WHERE a."Id" = t."AccountId" AND t."UserId" = {userId}

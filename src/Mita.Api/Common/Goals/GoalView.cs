@@ -45,8 +45,8 @@ public static class GoalView
 
     public static GoalDto From(Goal goal, decimal rateToBase, Currency baseCurrency, DateOnly today)
     {
-        var target = MinorUnits.Convert(goal.Target, rateToBase);
-        var saved = MinorUnits.Convert(goal.Saved, rateToBase);
+        var target = MinorUnits.Convert(goal.Target, rateToBase, goal.Currency, baseCurrency);
+        var saved = MinorUnits.Convert(goal.Saved, rateToBase, goal.Currency, baseCurrency);
         var remaining = Math.Max(target - saved, 0);
         return new GoalDto(
             goal.Id,

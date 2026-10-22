@@ -182,7 +182,7 @@ public sealed class GetOverviewHandler(AppDbContext db, ICurrentUser currentUser
                 return null;
             }
 
-            amount += MinorUnits.Convert(account.Balance, rate);
+            amount += MinorUnits.Convert(account.Balance, rate, account.Currency, baseCurrency);
         }
 
         return new OverviewBalanceResponse(amount, accounts.Count);

@@ -25,7 +25,7 @@ public sealed class TransactionConfiguration : IEntityTypeConfiguration<Transact
         builder.Property(transaction => transaction.Title).HasMaxLength(Transaction.TitleMaxLength).IsRequired();
         builder.Property(transaction => transaction.Note).HasMaxLength(Transaction.NoteMaxLength);
         builder.Property(transaction => transaction.Currency).HasConversion<string>().HasMaxLength(3);
-        builder.Property(transaction => transaction.Rate).HasPrecision(18, 6);
+        builder.Property(transaction => transaction.Rate).HasPrecision(24, 12);
 
         builder.HasIndex(transaction => new { transaction.UserId, transaction.Date });
         builder.HasIndex(transaction => transaction.AccountId);
