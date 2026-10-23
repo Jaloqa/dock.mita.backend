@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Mita.Api.Authentication;
 using Mita.Api.Common;
+using Mita.Api.Common.Debts;
 using Mita.Infrastructure.Persistence;
 
 namespace Mita.Api.Features.Debts.DeleteRepayment;
@@ -15,10 +16,7 @@ public sealed class DeleteRepaymentHandler(AppDbContext db, ICurrentUser current
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var debts = await db.Debts
-            .FromSql($"""SELECT * FROM debts WHERE "Id" = {command.DebtId} AND "UserId" = {userId} FOR UPDATE""")
-            .ToListAsync(cancellationToken);
-        var debt = debts.SingleOrDefault();
+        var debt = await db.LockDebtAsync(userId, command.DebtId, cancellationToken);
         if (debt is null)
         {
             return Error.NotFound();

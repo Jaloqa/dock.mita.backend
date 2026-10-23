@@ -35,10 +35,7 @@ public sealed class AddRepaymentHandler(AppDbContext db, ICurrentUser currentUse
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var debts = await db.Debts
-            .FromSql($"""SELECT * FROM debts WHERE "Id" = {command.DebtId} AND "UserId" = {userId} FOR UPDATE""")
-            .ToListAsync(cancellationToken);
-        var debt = debts.SingleOrDefault();
+        var debt = await db.LockDebtAsync(userId, command.DebtId, cancellationToken);
         if (debt is null)
         {
             return Error.NotFound();
