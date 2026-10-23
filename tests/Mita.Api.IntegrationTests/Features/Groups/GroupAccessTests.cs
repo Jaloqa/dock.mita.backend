@@ -32,8 +32,87 @@ public sealed class GroupAccessTests(MitaApiFactory factory) : IClassFixture<Mit
         var context = await new GroupAccess(db, new FixedUser(ownerId)).OpenOwnedAsync(group.Id, mode, Ct);
 
         context.ShouldBe(new GroupContext(group.Id, ownerId, Currency.EUR, GroupActor.Owner(ownerId)));
-        var scoped = await new GroupAccess(db, new FixedUser(ownerId)).OpenAsync(new GroupScope(group.Id), mode, Ct);
+        var scoped = await new GroupAccess(db, new FixedUser(ownerId)).OpenAsync(GroupScope.Owner(group.Id), mode, Ct);
         scoped.ShouldBe(context);
+    }
+
+    [Theory]
+    [InlineData(GroupLock.None)]
+    [InlineData(GroupLock.Share)]
+    [InlineData(GroupLock.Update)]
+    public async Task Should_OpenGroupByToken_When_LinkScopeAndAnyLockRequested(GroupLock mode)
+    {
+        var (ownerId, group) = await NewGroupAsync();
+        var (_, neighbour) = await NewGroupAsync();
+        var token = await ShareAsync(group.Id);
+        await ShareAsync(neighbour.Id);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var transaction = await db.Database.BeginTransactionAsync(Ct);
+        var access = new GroupAccess(db, new AnonymousUser());
+
+        var context = await access.OpenAsync(GroupScope.Link(token, null), mode, Ct);
+        var unknown = await access.OpenAsync(GroupScope.Link(ShareTokens.New(), null), mode, Ct);
+
+        context.ShouldNotBeNull();
+        (context.GroupId, context.OwnerId, context.Currency).ShouldBe((group.Id, ownerId, Currency.EUR));
+        unknown.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Should_ReturnNull_When_LinkTurnedOff()
+    {
+        var (_, group) = await NewGroupAsync();
+        var token = await ShareAsync(group.Id);
+        await using (var turnOff = factory.Services.CreateAsyncScope())
+        {
+            var writer = turnOff.ServiceProvider.GetRequiredService<AppDbContext>();
+            var stored = await writer.Groups.SingleAsync(row => row.Id == group.Id, Ct);
+            stored.TurnOffShareLink();
+            await writer.SaveChangesAsync(Ct);
+        }
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        (await new GroupAccess(db, new AnonymousUser()).OpenAsync(GroupScope.Link(token, null), GroupLock.None, Ct))
+            .ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(GroupLock.Share, true)]
+    [InlineData(GroupLock.Update, true)]
+    [InlineData(GroupLock.None, false)]
+    public async Task Should_LockTheGroupRow_When_LinkScopeRequestsLock(GroupLock requested, bool blocks)
+    {
+        var (ownerId, group) = await NewGroupAsync();
+        var token = await ShareAsync(group.Id);
+
+        await using var holderScope = factory.Services.CreateAsyncScope();
+        var holderDb = holderScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var holder = await holderDb.Database.BeginTransactionAsync(Ct);
+        (await new GroupAccess(holderDb, new FixedUser(ownerId)).OpenOwnedAsync(group.Id, GroupLock.Update, Ct))
+            .ShouldNotBeNull();
+
+        await using var waiterScope = factory.Services.CreateAsyncScope();
+        var waiterDb = waiterScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var waiter = await waiterDb.Database.BeginTransactionAsync(Ct);
+        await waiterDb.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '300ms'", Ct);
+
+        var blocked = false;
+        try
+        {
+            (await new GroupAccess(waiterDb, new AnonymousUser()).OpenAsync(GroupScope.Link(token, null), requested, Ct))
+                .ShouldNotBeNull();
+        }
+        catch (InvalidOperationException exception)
+            when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.LockNotAvailable })
+        {
+            blocked = true;
+        }
+
+        blocked.ShouldBe(blocks);
     }
 
     [Theory]
@@ -101,8 +180,24 @@ public sealed class GroupAccessTests(MitaApiFactory factory) : IClassFixture<Mit
         return (ownerId, group);
     }
 
+    private async Task<string> ShareAsync(Guid groupId)
+    {
+        var token = ShareTokens.New();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var group = await db.Groups.SingleAsync(row => row.Id == groupId, Ct);
+        group.TurnOnShareLink(token);
+        await db.SaveChangesAsync(Ct);
+        return token;
+    }
+
     private sealed class FixedUser(Guid id) : ICurrentUser
     {
         public Guid Id => id;
+    }
+
+    private sealed class AnonymousUser : ICurrentUser
+    {
+        public Guid Id => throw new UnauthorizedAccessException("A link scope must not read the current user.");
     }
 }

@@ -12,9 +12,20 @@ public static class ExpenseHistoryEndpoint
         group.MapGet(
                 "/groups/{id:guid}/expenses/{expenseId:guid}/history",
                 async (Guid id, Guid expenseId, IMediator mediator, CancellationToken ct, int page = 1, int pageSize = 100) =>
-                    (await mediator.Send(new ExpenseHistoryQuery(new GroupScope(id), expenseId, page, pageSize), ct))
+                    (await mediator.Send(new ExpenseHistoryQuery(GroupScope.Owner(id), expenseId, page, pageSize), ct))
                         .ToHttp(history => Results.Ok(history)))
             .RequireAuthorization(AuthExtensions.UserPolicy);
+
+        return group;
+    }
+
+    public static RouteGroupBuilder MapSharedExpenseHistory(this RouteGroupBuilder group)
+    {
+        group.MapGet(
+            "/expenses/{expenseId:guid}/history",
+            async (string token, Guid expenseId, IMediator mediator, CancellationToken ct, int page = 1, int pageSize = 100) =>
+                (await mediator.Send(new ExpenseHistoryQuery(GroupScope.Link(token, null), expenseId, page, pageSize), ct))
+                    .ToHttp(history => Results.Ok(history)));
 
         return group;
     }

@@ -12,7 +12,7 @@ public static class AddCategoryEndpoint
         group.MapPost(
                 "/groups/{id:guid}/categories",
                 async (Guid id, AddCategoryRequest? request, IMediator mediator, CancellationToken ct) =>
-                    (await mediator.Send(new AddCategoryCommand(new GroupScope(id), request?.Name), ct))
+                    (await mediator.Send(new AddCategoryCommand(GroupScope.Owner(id), request?.Name), ct))
                         .ToHttp(category => Results.Created((string?)null, category)))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 

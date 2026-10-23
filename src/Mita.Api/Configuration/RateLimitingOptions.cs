@@ -9,6 +9,8 @@ public sealed class RateLimitingOptions
     public int AuthPermitLimit { get; set; } = 10;
 
     public int SessionPermitLimit { get; set; } = 60;
+
+    public int GroupLinkPermitLimit { get; set; } = 120;
 }
 
 public sealed class RateLimitingOptionsValidator : IValidateOptions<RateLimitingOptions>
@@ -24,6 +26,11 @@ public sealed class RateLimitingOptionsValidator : IValidateOptions<RateLimiting
         if (options.SessionPermitLimit < 1)
         {
             failures.Add(MustBePositive(nameof(RateLimitingOptions.SessionPermitLimit)));
+        }
+
+        if (options.GroupLinkPermitLimit < 1)
+        {
+            failures.Add(MustBePositive(nameof(RateLimitingOptions.GroupLinkPermitLimit)));
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);

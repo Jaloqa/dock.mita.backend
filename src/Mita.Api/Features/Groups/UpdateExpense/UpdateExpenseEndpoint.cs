@@ -14,7 +14,7 @@ public static class UpdateExpenseEndpoint
                 async (Guid id, Guid expenseId, UpdateExpenseRequest? request, IMediator mediator, CancellationToken ct) =>
                 {
                     var command = new UpdateExpenseCommand(
-                        new GroupScope(id),
+                        GroupScope.Owner(id),
                         expenseId,
                         request?.PayerId,
                         request?.Amount,

@@ -11,6 +11,7 @@ public static class RateLimitingExtensions
 {
     public const string AuthPolicy = "auth";
     public const string SessionPolicy = "session";
+    public const string GroupLinkPolicy = "groupLink";
 
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
 
@@ -26,6 +27,7 @@ public static class RateLimitingExtensions
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.AddPolicy(AuthPolicy, context => PerClientIp(context, limits => limits.AuthPermitLimit));
             options.AddPolicy(SessionPolicy, context => PerClientIp(context, limits => limits.SessionPermitLimit));
+            options.AddPolicy(GroupLinkPolicy, context => PerClientIp(context, limits => limits.GroupLinkPermitLimit));
             options.OnRejected = async (context, _) =>
             {
                 if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))

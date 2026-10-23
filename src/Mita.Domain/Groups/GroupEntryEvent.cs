@@ -31,16 +31,24 @@ public sealed class GroupEntryEvent
         GroupEntryAction action,
         DateTimeOffset at,
         GroupActor actor,
-        string state) => new()
+        string state)
     {
-        Id = Guid.CreateVersion7(),
-        GroupId = groupId,
-        Kind = kind,
-        EntryId = entryId,
-        Action = action,
-        At = at,
-        ActorUserId = actor.UserId,
-        ActorMemberId = actor.MemberId,
-        State = state
-    };
+        if (actor.UserId.HasValue == actor.MemberId.HasValue)
+        {
+            throw new ArgumentException("The actor must be either a user or a member.", nameof(actor));
+        }
+
+        return new GroupEntryEvent
+        {
+            Id = Guid.CreateVersion7(),
+            GroupId = groupId,
+            Kind = kind,
+            EntryId = entryId,
+            Action = action,
+            At = at,
+            ActorUserId = actor.UserId,
+            ActorMemberId = actor.MemberId,
+            State = state
+        };
+    }
 }

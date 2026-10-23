@@ -12,8 +12,18 @@ public static class GetGroupEndpoint
         group.MapGet(
                 "/groups/{id:guid}",
                 async (Guid id, IMediator mediator, CancellationToken ct) =>
-                    (await mediator.Send(new GetGroupQuery(new GroupScope(id)), ct)).ToHttp(found => Results.Ok(found)))
+                    (await mediator.Send(new GetGroupQuery(GroupScope.Owner(id)), ct)).ToHttp(found => Results.Ok(found)))
             .RequireAuthorization(AuthExtensions.UserPolicy);
+
+        return group;
+    }
+
+    public static RouteGroupBuilder MapSharedGetGroup(this RouteGroupBuilder group)
+    {
+        group.MapGet(
+            "",
+            async (string token, IMediator mediator, CancellationToken ct) =>
+                (await mediator.Send(new GetGroupQuery(GroupScope.Link(token, null)), ct)).ToHttp(found => Results.Ok(found)));
 
         return group;
     }

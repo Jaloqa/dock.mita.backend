@@ -1,6 +1,8 @@
+using Elastic.Apm.Api;
 using Elastic.Apm.NetCoreAll;
 using Elastic.CommonSchema.Serilog;
 using Mita.Api.Common.Logging;
+using Mita.Api.Middleware;
 using Serilog;
 
 namespace Mita.Api.Extensions;
@@ -22,6 +24,7 @@ public static class LoggingExtensions
         if (!string.IsNullOrWhiteSpace(builder.Configuration["ElasticApm:ServerUrl"]))
         {
             builder.Services.AddAllElasticApm();
+            builder.Services.AddHostedService<ShareLinkApmFilters>();
         }
 
         return builder;
@@ -32,4 +35,9 @@ public static class LoggingExtensions
         var logger = app.ApplicationServices.GetRequiredService<Serilog.ILogger>();
         return app.UseSerilogRequestLogging(options => options.Logger = logger);
     }
+
+    public static IApplicationBuilder UseMitaApmTransactionNames(this IApplicationBuilder app) =>
+        app.ApplicationServices.GetRequiredService<IServiceProviderIsService>().IsService(typeof(ITracer))
+            ? app.UseMiddleware<ApmTransactionNameMiddleware>()
+            : app;
 }

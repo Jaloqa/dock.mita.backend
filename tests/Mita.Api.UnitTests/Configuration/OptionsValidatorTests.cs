@@ -22,6 +22,23 @@ public sealed class OptionsValidatorTests
             .Validate(null, new RateLimitingOptions { SessionPermitLimit = limit })
             .Succeeded.ShouldBe(valid);
 
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public void Should_RequirePositiveGroupLinkPermitLimit_When_ValidatingRateLimitingOptions(int limit, bool valid) =>
+        new RateLimitingOptionsValidator()
+            .Validate(null, new RateLimitingOptions { GroupLinkPermitLimit = limit })
+            .Succeeded.ShouldBe(valid);
+
+    [Fact]
+    public void Should_AllowHundredTwentyGroupLinkRequests_When_NotConfigured()
+    {
+        var options = new RateLimitingOptions();
+
+        options.GroupLinkPermitLimit.ShouldBe(120);
+        new RateLimitingOptionsValidator().Validate(null, options).Succeeded.ShouldBeTrue();
+    }
+
     [Fact]
     public void Should_AcceptDefaults_When_ValidatingRatesOptions()
     {

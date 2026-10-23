@@ -1,14 +1,21 @@
 using Microsoft.EntityFrameworkCore;
 using Mita.Api.Authentication;
 using Mita.Domain.Groups;
+using Mita.Domain.Money;
 using Mita.Infrastructure.Persistence;
 
 namespace Mita.Api.Common.Groups;
 
 public sealed class GroupAccess(AppDbContext db, ICurrentUser currentUser)
 {
-    public Task<GroupContext?> OpenAsync(GroupScope scope, GroupLock mode, CancellationToken ct) =>
-        OpenOwnedAsync(scope.GroupId, mode, ct);
+    private static readonly GroupActor LinkReader = new(null, null);
+
+    public Task<GroupContext?> OpenAsync(GroupScope scope, GroupLock mode, CancellationToken ct) => scope switch
+    {
+        OwnerGroupScope owner => OpenOwnedAsync(owner.GroupId, mode, ct),
+        LinkGroupScope link => OpenLinkedAsync(link.Token, mode, ct),
+        _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unknown group scope.")
+    };
 
     public async Task<GroupContext?> OpenOwnedAsync(Guid groupId, GroupLock mode, CancellationToken ct)
     {
@@ -22,11 +29,32 @@ public sealed class GroupAccess(AppDbContext db, ICurrentUser currentUser)
             _ => db.Groups.Where(group => group.Id == groupId && group.OwnerId == userId)
         };
 
-        var rows = await groups.AsNoTracking()
-            .Select(group => new { group.Id, group.OwnerId, group.Currency })
-            .ToListAsync(ct);
-        return rows.Count == 0
-            ? null
-            : new GroupContext(rows[0].Id, rows[0].OwnerId, rows[0].Currency, GroupActor.Owner(userId));
+        var row = await HeaderAsync(groups, ct);
+        return row is null ? null : new GroupContext(row.Id, row.OwnerId, row.Currency, GroupActor.Owner(userId));
     }
+
+    private async Task<GroupContext?> OpenLinkedAsync(string token, GroupLock mode, CancellationToken ct)
+    {
+        var groups = mode switch
+        {
+            GroupLock.Share => db.Groups.FromSql(
+                $"""SELECT * FROM "groups" WHERE "ShareToken" = {token} FOR SHARE"""),
+            GroupLock.Update => db.Groups.FromSql(
+                $"""SELECT * FROM "groups" WHERE "ShareToken" = {token} FOR UPDATE"""),
+            _ => db.Groups.Where(group => group.ShareToken == token)
+        };
+
+        var row = await HeaderAsync(groups, ct);
+        return row is null ? null : new GroupContext(row.Id, row.OwnerId, row.Currency, LinkReader);
+    }
+
+    private static async Task<GroupHeader?> HeaderAsync(IQueryable<Group> groups, CancellationToken ct)
+    {
+        var rows = await groups.AsNoTracking()
+            .Select(group => new GroupHeader(group.Id, group.OwnerId, group.Currency))
+            .ToListAsync(ct);
+        return rows.Count == 0 ? null : rows[0];
+    }
+
+    private sealed record GroupHeader(Guid Id, Guid OwnerId, Currency Currency);
 }

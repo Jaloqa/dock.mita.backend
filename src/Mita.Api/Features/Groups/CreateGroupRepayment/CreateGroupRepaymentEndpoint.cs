@@ -14,7 +14,7 @@ public static class CreateGroupRepaymentEndpoint
                 async (Guid id, CreateGroupRepaymentRequest? request, IMediator mediator, CancellationToken ct) =>
                 {
                     var command = new CreateGroupRepaymentCommand(
-                        new GroupScope(id),
+                        GroupScope.Owner(id),
                         request?.FromMemberId,
                         request?.ToMemberId,
                         request?.Amount,
