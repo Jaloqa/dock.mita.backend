@@ -23,9 +23,7 @@ public sealed class InviteMemberHandler(AppDbContext db, GroupAccess access, Tim
             return Error.NotFound();
         }
 
-        var member = await db.GroupMembers.SingleOrDefaultAsync(
-            candidate => candidate.Id == command.MemberId && candidate.GroupId == context.GroupId,
-            cancellationToken);
+        var member = await db.MemberOfGroupAsync(context.GroupId, command.MemberId, cancellationToken);
         if (member is null)
         {
             return Error.NotFound();
@@ -37,11 +35,8 @@ public sealed class InviteMemberHandler(AppDbContext db, GroupAccess access, Tim
             errors["memberId"] = [GroupLinkRules.MemberLinked];
         }
 
-        var ownerEmail = await db.Users.AsNoTracking()
-            .Where(user => user.Id == context.OwnerId)
-            .Select(user => user.Email)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (ownerEmail is not null && string.Equals(Normalize(ownerEmail), email, StringComparison.Ordinal))
+        var ownerEmail = await db.CurrentAsync(context.OwnerId, cancellationToken);
+        if (string.Equals(ownerEmail, email, StringComparison.Ordinal))
         {
             errors["email"] = [GroupLinkRules.InviteSelf];
         }
@@ -67,8 +62,6 @@ public sealed class InviteMemberHandler(AppDbContext db, GroupAccess access, Tim
 
     private static string ParseEmail(JsonElement? value) =>
         JsonValues.TryGetString(value, out var text)
-            ? Normalize(text)
+            ? GroupInviteEmails.Normalize(text)
             : throw new InvalidOperationException("The email reached the handler without passing validation.");
-
-    private static string Normalize(string email) => email.Trim().ToLowerInvariant();
 }

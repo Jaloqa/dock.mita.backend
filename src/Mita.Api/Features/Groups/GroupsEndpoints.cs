@@ -13,6 +13,7 @@ using Mita.Api.Features.Groups.GetGroup;
 using Mita.Api.Features.Groups.GetGroupBalances;
 using Mita.Api.Features.Groups.GroupRepaymentHistory;
 using Mita.Api.Features.Groups.InviteMember;
+using Mita.Api.Features.Groups.LeaveGroup;
 using Mita.Api.Features.Groups.LinkMember;
 using Mita.Api.Features.Groups.ListExpenses;
 using Mita.Api.Features.Groups.ListGroupRepayments;
@@ -50,6 +51,7 @@ public static class GroupsEndpoints
             .MapUnlinkMember()
             .MapInviteMember()
             .MapCancelInvite()
+            .MapLeaveGroup()
             .MapAddCategory()
             .MapListExpenses()
             .MapCreateExpense()

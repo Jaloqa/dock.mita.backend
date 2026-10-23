@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentValidation;
 using FluentValidation.Results;
+using Mita.Api.Common.Groups;
 using Mita.Api.Common.Users;
 using Mita.Api.Common.Wire;
 
@@ -24,7 +25,9 @@ public sealed class InviteMemberValidator : AbstractValidator<InviteMemberComman
             return "validation.required";
         }
 
-        return JsonValues.TryGetString(value, out var text) && EmailAddress.IsValid(text.Trim())
+        return JsonValues.TryGetString(value, out var text)
+            && GroupInviteEmails.TryNormalize(text, out var email)
+            && EmailAddress.IsValid(email)
             ? null
             : "validation.invalidEmail";
     }

@@ -8,6 +8,7 @@ using Mita.Api.Features.Groups.ExpenseHistory;
 using Mita.Api.Features.Groups.GetGroup;
 using Mita.Api.Features.Groups.GetGroupBalances;
 using Mita.Api.Features.Groups.GroupRepaymentHistory;
+using Mita.Api.Features.Groups.LinkThroughShare;
 using Mita.Api.Features.Groups.ListExpenses;
 using Mita.Api.Features.Groups.ListGroupRepayments;
 using Mita.Api.Features.Groups.RestoreExpense;
@@ -28,6 +29,7 @@ public static class SharedGroupsEndpoints
             .RequireAuthorization(AuthExtensions.GroupLinkPolicy)
             .RequireRateLimiting(RateLimitingExtensions.GroupLinkPolicy)
             .MapSharedGetGroup()
+            .MapLinkThroughShare()
             .MapSharedAddCategory()
             .MapSharedGetGroupBalances()
             .MapSharedListExpenses()

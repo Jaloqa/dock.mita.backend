@@ -16,13 +16,16 @@ public sealed class InviteMemberValidatorTests
         { """{"email":"max@example"}""", "validation.invalidEmail" },
         { """{"email":"max@exa mple.com"}""", "validation.invalidEmail" },
         { """{"email":["max@example.com"]}""", "validation.invalidEmail" },
-        { "{\"email\":\"" + new string('a', 243) + "@example.com\"}", "validation.invalidEmail" }
+        { "{\"email\":\"" + new string('a', 243) + "@example.com\"}", "validation.invalidEmail" },
+        { "{\"email\":\"" + new string('a', 241) + "\\u0958@example.com\"}", "validation.invalidEmail" },
+        { """{"email":"max\ufffe@example.com"}""", "validation.invalidEmail" }
     };
 
     public static TheoryData<string> ValidEmails => new()
     {
         """{"email":" Max@Example.com "}""",
         """{"email":"m@x.pl"}""",
+        """{"email":"rene@cafe\u0301.fr"}""",
         "{\"email\":\"  " + new string('a', 242) + "@example.com  \"}"
     };
 
