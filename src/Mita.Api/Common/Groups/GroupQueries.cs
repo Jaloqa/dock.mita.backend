@@ -38,7 +38,11 @@ public static class GroupQueries
                 .Where(expense => expense.GroupId == group.Id && expense.DeletedAt == null)
                 .Sum(expense => (long?)expense.GroupAmount) ?? 0));
 
-    public static async Task<GroupDto> LoadAsync(this AppDbContext db, Guid groupId, CancellationToken ct)
+    public static async Task<GroupDto> LoadAsync(
+        this AppDbContext db,
+        Guid groupId,
+        bool includeShareToken,
+        CancellationToken ct)
     {
         var header = await db.Groups.AsNoTracking()
             .Where(group => group.Id == groupId)
@@ -47,6 +51,7 @@ public static class GroupQueries
                 group.Id,
                 group.Name,
                 group.Currency,
+                group.ShareToken,
                 Total = db.GroupExpenses
                     .Where(expense => expense.GroupId == group.Id && expense.DeletedAt == null)
                     .Sum(expense => (long?)expense.GroupAmount) ?? 0,
@@ -80,6 +85,7 @@ public static class GroupQueries
             header.Locked,
             header.Total,
             members,
-            categories);
+            categories,
+            includeShareToken ? header.ShareToken : null);
     }
 }

@@ -116,6 +116,24 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
 
         groupTypes.ShouldBe(["group_expenses.Tags _text", "group_entry_events.State jsonb"], ignoreOrder: true);
 
+        await using var shareColumn = new NpgsqlCommand(
+            """
+            SELECT column_name || ' ' || data_type || '(' || character_maximum_length || ') ' || is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'groups' AND column_name = 'ShareToken'
+            """,
+            connection);
+        (await shareColumn.ExecuteScalarAsync(ct)).ShouldBe("ShareToken character varying(43) YES");
+
+        await using var shareIndex = new NpgsqlCommand(
+            "SELECT indexdef FROM pg_indexes WHERE tablename = 'groups' AND indexname = 'IX_groups_ShareToken'",
+            connection);
+        var shareIndexDefinition = (string?)await shareIndex.ExecuteScalarAsync(ct);
+        shareIndexDefinition.ShouldNotBeNull();
+        shareIndexDefinition.ShouldContain("CREATE UNIQUE INDEX");
+        shareIndexDefinition.ShouldContain("(\"ShareToken\")");
+        shareIndexDefinition.ShouldContain("WHERE (\"ShareToken\" IS NOT NULL)");
+
         await using var index = new NpgsqlCommand(
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'IX_tags_user_name'",
             connection);

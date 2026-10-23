@@ -7,4 +7,5 @@ public sealed record GroupDto(
     bool CurrencyLocked,
     long Total,
     IReadOnlyList<GroupMemberDto> Members,
-    IReadOnlyList<GroupCategoryDto> Categories);
+    IReadOnlyList<GroupCategoryDto> Categories,
+    string? ShareToken);

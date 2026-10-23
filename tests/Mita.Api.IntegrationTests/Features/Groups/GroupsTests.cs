@@ -45,14 +45,14 @@ public sealed class GroupsTests(MitaApiFactory factory) : IClassFixture<MitaApiF
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
         body.EnumerateObject().Select(property => property.Name).ShouldBe(
-            ["id", "name", "currency", "currencyLocked", "total", "members", "categories"],
-            ignoreOrder: true);
+            ["id", "name", "currency", "currencyLocked", "total", "members", "categories", "shareToken"]);
         var id = body.GetProperty("id").GetGuid();
         response.Headers.Location!.ToString().ShouldBe($"{GroupsPath}/{id}");
         body.GetProperty("name").GetString().ShouldBe("Albania 2026");
         body.GetProperty("currency").GetString().ShouldBe("EUR");
         body.GetProperty("currencyLocked").GetBoolean().ShouldBeFalse();
         body.GetProperty("total").GetInt64().ShouldBe(0);
+        body.GetProperty("shareToken").ValueKind.ShouldBe(JsonValueKind.Null);
 
         var members = body.GetProperty("members").EnumerateArray().ToList();
         members.Select(member => member.GetProperty("name").GetString()).ShouldBe(["Anna", "Olya", "Max"]);

@@ -25,6 +25,6 @@ public sealed class CreateGroupHandler(AppDbContext db, ICurrentUser currentUser
         db.GroupMembers.AddRange(members.Select((member, position) => GroupMember.Create(group.Id, member, position)));
         await db.SaveChangesAsync(cancellationToken);
 
-        return await db.LoadAsync(group.Id, cancellationToken);
+        return await db.LoadAsync(group.Id, includeShareToken: true, cancellationToken);
     }
 }

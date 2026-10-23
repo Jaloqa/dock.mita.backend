@@ -16,7 +16,12 @@ public sealed class GroupConfiguration : IEntityTypeConfiguration<Group>
         builder.Property(group => group.Name).HasMaxLength(Group.NameMaxLength).IsRequired();
         builder.Property(group => group.Currency).HasConversion<string>().HasMaxLength(3);
 
+        builder.Property(group => group.ShareToken).HasMaxLength(ShareTokens.Length);
+
         builder.HasIndex(group => new { group.OwnerId, group.CreatedAt });
+        builder.HasIndex(group => group.ShareToken)
+            .IsUnique()
+            .HasFilter("\"ShareToken\" IS NOT NULL");
 
         builder.HasOne<AppUser>()
             .WithMany()

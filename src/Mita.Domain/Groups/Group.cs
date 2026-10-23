@@ -23,6 +23,8 @@ public sealed class Group : IAuditable
 
     public Currency Currency { get; private set; }
 
+    public string? ShareToken { get; private set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
@@ -39,4 +41,16 @@ public sealed class Group : IAuditable
         Name = name;
         Currency = currency;
     }
+
+    public void TurnOnShareLink(string token)
+    {
+        if (!ShareTokens.IsWellFormed(token))
+        {
+            throw new ArgumentException("The share token is malformed.", nameof(token));
+        }
+
+        ShareToken = token;
+    }
+
+    public void TurnOffShareLink() => ShareToken = null;
 }

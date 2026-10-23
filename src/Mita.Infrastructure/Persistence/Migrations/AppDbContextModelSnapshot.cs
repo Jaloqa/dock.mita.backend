@@ -549,10 +549,18 @@ namespace Mita.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ShareToken")
+                        .HasMaxLength(43)
+                        .HasColumnType("character varying(43)");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ShareToken")
+                        .IsUnique()
+                        .HasFilter("\"ShareToken\" IS NOT NULL");
 
                     b.HasIndex("OwnerId", "CreatedAt");
 
