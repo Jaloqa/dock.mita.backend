@@ -228,6 +228,9 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         paths.TryGetProperty("/v1/groups/{id}/members/{memberId}", out var member).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/categories", out var categories).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/expenses", out var expenses).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/expenses/{expenseId}", out var expense).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/expenses/{expenseId}/restore", out var restore).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/expenses/{expenseId}/history", out var history).ShouldBeTrue();
 
         TagOf(groups.GetProperty("get")).ShouldBe("Groups");
         TagOf(groups.GetProperty("post")).ShouldBe("Groups");
@@ -243,6 +246,11 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(expenses.GetProperty("post")).ShouldBe("Groups");
         ParameterNames(expenses.GetProperty("get")).ShouldContain("deleted");
         ParameterNames(expenses.GetProperty("get")).ShouldContain("pageSize");
+        TagOf(expense.GetProperty("put")).ShouldBe("Groups");
+        TagOf(expense.GetProperty("delete")).ShouldBe("Groups");
+        TagOf(restore.GetProperty("post")).ShouldBe("Groups");
+        TagOf(history.GetProperty("get")).ShouldBe("Groups");
+        ParameterNames(history.GetProperty("get")).ShouldContain("pageSize");
     }
 
     [Fact]

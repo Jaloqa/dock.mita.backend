@@ -8,6 +8,10 @@ public static class GroupEntryEvents
 {
     private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web);
 
+    public static TState ReadState<TState>(string state) =>
+        JsonSerializer.Deserialize<TState>(state, StateJson)
+        ?? throw new InvalidOperationException("An event stores the state of its entry.");
+
     public static void Append(
         AppDbContext db,
         GroupContext group,
