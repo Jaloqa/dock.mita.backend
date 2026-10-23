@@ -47,6 +47,44 @@ public static class GroupQueries
             group.OwnerId == userId ? ownerRole : memberRole));
     }
 
+    public static async Task<IReadOnlyList<GroupMemberDto>> LoadMembersAsync(
+        this IQueryable<GroupMember> members,
+        AppDbContext db,
+        GroupContext group,
+        CancellationToken ct)
+    {
+        var groupId = group.GroupId;
+        var ownerView = group.Role == GroupRole.Owner;
+
+        var rows = await members.AsNoTracking()
+            .Where(member => member.GroupId == groupId)
+            .OrderBy(member => member.Position)
+            .Select(member => new
+            {
+                member.Id,
+                member.Name,
+                InUse = db.UsedMemberIds(groupId).Contains(member.Id),
+                Linked = member.UserId != null,
+                LinkedName = db.Users
+                    .Where(user => user.Id == member.UserId)
+                    .Select(user => user.Name)
+                    .FirstOrDefault(),
+                member.InvitedEmail
+            })
+            .ToListAsync(ct);
+
+        return
+        [
+            .. rows.Select(member => new GroupMemberDto(
+                member.Id,
+                member.Name,
+                member.InUse,
+                member.Linked,
+                ownerView ? member.LinkedName : null,
+                ownerView ? member.InvitedEmail : null))
+        ];
+    }
+
     public static async Task<GroupDto> LoadAsync(this AppDbContext db, GroupContext group, CancellationToken ct)
     {
         var groupId = group.GroupId;
@@ -68,22 +106,7 @@ public static class GroupQueries
             })
             .SingleAsync(ct);
 
-        var members = await db.GroupMembers.AsNoTracking()
-            .Where(member => member.GroupId == groupId)
-            .OrderBy(member => member.Position)
-            .Select(member => new
-            {
-                member.Id,
-                member.Name,
-                InUse = db.UsedMemberIds(groupId).Contains(member.Id),
-                Linked = member.UserId != null,
-                LinkedName = db.Users
-                    .Where(user => user.Id == member.UserId)
-                    .Select(user => user.Name)
-                    .FirstOrDefault(),
-                member.InvitedEmail
-            })
-            .ToListAsync(ct);
+        var members = await db.GroupMembers.LoadMembersAsync(db, group, ct);
 
         var own = await db.GroupCategories.AsNoTracking()
             .Where(category => category.GroupId == groupId)
@@ -103,15 +126,7 @@ public static class GroupQueries
             CurrencyWire.ToWire(header.Currency),
             header.Locked,
             header.Total,
-            [
-                .. members.Select(member => new GroupMemberDto(
-                    member.Id,
-                    member.Name,
-                    member.InUse,
-                    member.Linked,
-                    ownerView ? member.LinkedName : null,
-                    ownerView ? member.InvitedEmail : null))
-            ],
+            members,
             categories,
             ownerView ? header.ShareToken : null,
             GroupWire.ToWire(group.Role),
