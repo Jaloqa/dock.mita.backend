@@ -13,7 +13,7 @@ public static class RestoreExpenseEndpoint
         group.MapPost(
                 "/groups/{id:guid}/expenses/{expenseId:guid}/restore",
                 (Guid id, Guid expenseId, IMediator mediator, CancellationToken ct) =>
-                    RestoreAsync(GroupScope.Owner(id), expenseId, mediator, ct))
+                    RestoreAsync(GroupScope.User(id), expenseId, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;

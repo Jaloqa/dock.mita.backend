@@ -28,42 +28,61 @@ public static class GroupQueries
         await db.GroupExpenses.AnyAsync(expense => expense.GroupId == groupId, ct)
         || await db.GroupRepayments.AnyAsync(repayment => repayment.GroupId == groupId, ct);
 
-    public static IQueryable<GroupSummaryDto> ProjectSummaries(this IQueryable<Group> groups, AppDbContext db) =>
-        groups.Select(group => new GroupSummaryDto(
+    public static IQueryable<GroupSummaryDto> ProjectSummaries(
+        this IQueryable<Group> groups,
+        AppDbContext db,
+        Guid userId)
+    {
+        var ownerRole = GroupWire.ToWire(GroupRole.Owner);
+        var memberRole = GroupWire.ToWire(GroupRole.Member);
+
+        return groups.Select(group => new GroupSummaryDto(
             group.Id,
             group.Name,
             CurrencyWire.ToWire(group.Currency),
             db.GroupMembers.Count(member => member.GroupId == group.Id),
             db.GroupExpenses
                 .Where(expense => expense.GroupId == group.Id && expense.DeletedAt == null)
-                .Sum(expense => (long?)expense.GroupAmount) ?? 0));
+                .Sum(expense => (long?)expense.GroupAmount) ?? 0,
+            group.OwnerId == userId ? ownerRole : memberRole));
+    }
 
-    public static async Task<GroupDto> LoadAsync(
-        this AppDbContext db,
-        Guid groupId,
-        bool includeShareToken,
-        CancellationToken ct)
+    public static async Task<GroupDto> LoadAsync(this AppDbContext db, GroupContext group, CancellationToken ct)
     {
+        var groupId = group.GroupId;
+        var ownerView = group.Role == GroupRole.Owner;
+
         var header = await db.Groups.AsNoTracking()
-            .Where(group => group.Id == groupId)
-            .Select(group => new
+            .Where(row => row.Id == groupId)
+            .Select(row => new
             {
-                group.Id,
-                group.Name,
-                group.Currency,
-                group.ShareToken,
+                row.Id,
+                row.Name,
+                row.Currency,
+                row.ShareToken,
                 Total = db.GroupExpenses
-                    .Where(expense => expense.GroupId == group.Id && expense.DeletedAt == null)
+                    .Where(expense => expense.GroupId == row.Id && expense.DeletedAt == null)
                     .Sum(expense => (long?)expense.GroupAmount) ?? 0,
-                Locked = db.GroupExpenses.Any(expense => expense.GroupId == group.Id)
-                    || db.GroupRepayments.Any(repayment => repayment.GroupId == group.Id)
+                Locked = db.GroupExpenses.Any(expense => expense.GroupId == row.Id)
+                    || db.GroupRepayments.Any(repayment => repayment.GroupId == row.Id)
             })
             .SingleAsync(ct);
 
         var members = await db.GroupMembers.AsNoTracking()
             .Where(member => member.GroupId == groupId)
             .OrderBy(member => member.Position)
-            .Select(member => new GroupMemberDto(member.Id, member.Name, db.UsedMemberIds(groupId).Contains(member.Id)))
+            .Select(member => new
+            {
+                member.Id,
+                member.Name,
+                InUse = db.UsedMemberIds(groupId).Contains(member.Id),
+                Linked = member.UserId != null,
+                LinkedName = db.Users
+                    .Where(user => user.Id == member.UserId)
+                    .Select(user => user.Name)
+                    .FirstOrDefault(),
+                member.InvitedEmail
+            })
             .ToListAsync(ct);
 
         var own = await db.GroupCategories.AsNoTracking()
@@ -84,8 +103,18 @@ public static class GroupQueries
             CurrencyWire.ToWire(header.Currency),
             header.Locked,
             header.Total,
-            members,
+            [
+                .. members.Select(member => new GroupMemberDto(
+                    member.Id,
+                    member.Name,
+                    member.InUse,
+                    member.Linked,
+                    ownerView ? member.LinkedName : null,
+                    ownerView ? member.InvitedEmail : null))
+            ],
             categories,
-            includeShareToken ? header.ShareToken : null);
+            ownerView ? header.ShareToken : null,
+            GroupWire.ToWire(group.Role),
+            group.MyMemberId);
     }
 }

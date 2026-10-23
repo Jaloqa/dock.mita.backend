@@ -314,6 +314,8 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
         var credentials = await client.RegisterNewAsync(Ct);
         var userId = (await GetMeAsync(client)).GetProperty("id").GetGuid();
         var (group, members) = await TestData.AddGroupAsync(factory, userId);
+        await TestData.LinkMemberAsync(factory, members[0], userId);
+        await TestData.InviteMemberAsync(factory, members[2], "max@example.com");
         var expense = await TestData.AddGroupExpenseAsync(factory, group, members[0], 9_000, members);
         await TestData.AddGroupExpenseAsync(factory, group, members[1], 1_500, members[1..], deleted: true);
         await TestData.AddGroupRepaymentAsync(factory, group, members[2], members[0], 3_000);
@@ -355,6 +357,47 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
         (await check.GroupExpenseShares.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
         (await check.GroupRepayments.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
         (await check.GroupEntryEvents.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Should_UnlinkMember_When_LinkedUserDeleted()
+    {
+        using var owner = new AuthClient(factory);
+        using var linked = new AuthClient(factory);
+        await owner.RegisterNewAsync(Ct);
+        var credentials = await linked.RegisterNewAsync(Ct);
+        var ownerId = (await GetMeAsync(owner)).GetProperty("id").GetGuid();
+        var linkedId = (await GetMeAsync(linked)).GetProperty("id").GetGuid();
+        var (group, members) = await TestData.AddGroupAsync(factory, ownerId);
+        await TestData.LinkMemberAsync(factory, members[1], linkedId);
+        await TestData.AddGroupExpenseAsync(factory, group, members[1], 6_000, members);
+
+        using (var response = await DeleteAsync(linked, new { password = credentials.Password }))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            (await db.Users.AnyAsync(row => row.Id == linkedId, Ct)).ShouldBeFalse();
+            var stored = await db.GroupMembers.AsNoTracking()
+                .Where(row => row.GroupId == group.Id)
+                .OrderBy(row => row.Position)
+                .Select(row => new { row.Name, row.UserId })
+                .ToListAsync(Ct);
+            stored.Select(row => row.Name).ShouldBe(["Anna", "Olya", "Max"]);
+            stored.ShouldAllBe(row => row.UserId == null);
+            (await db.GroupExpenses.CountAsync(row => row.GroupId == group.Id, Ct)).ShouldBe(1);
+        }
+
+        using var read = await owner.Http.GetAsync($"/v1/groups/{group.Id}", Ct);
+
+        read.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await read.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        body.GetProperty("total").GetInt64().ShouldBe(6_000);
+        body.GetProperty("members").EnumerateArray().Select(member => member.GetProperty("linked").GetBoolean())
+            .ShouldBe([false, false, false]);
     }
 
     [Fact]

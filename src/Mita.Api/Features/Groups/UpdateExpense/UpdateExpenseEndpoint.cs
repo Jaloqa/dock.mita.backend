@@ -13,7 +13,7 @@ public static class UpdateExpenseEndpoint
         group.MapPut(
                 "/groups/{id:guid}/expenses/{expenseId:guid}",
                 (Guid id, Guid expenseId, UpdateExpenseRequest? request, IMediator mediator, CancellationToken ct) =>
-                    UpdateAsync(GroupScope.Owner(id), expenseId, request, mediator, ct))
+                    UpdateAsync(GroupScope.User(id), expenseId, request, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;

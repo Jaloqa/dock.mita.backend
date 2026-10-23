@@ -134,6 +134,50 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
         shareIndexDefinition.ShouldContain("(\"ShareToken\")");
         shareIndexDefinition.ShouldContain("WHERE (\"ShareToken\" IS NOT NULL)");
 
+        await using var memberLinkColumns = new NpgsqlCommand(
+            """
+            SELECT column_name || ' ' || data_type || coalesce('(' || character_maximum_length || ')', '') || ' '
+                || is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'group_members'
+              AND column_name IN ('UserId', 'InvitedEmail', 'InvitedAt')
+            """,
+            connection);
+        var linkColumns = new List<string>();
+        await using (var reader = await memberLinkColumns.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                linkColumns.Add(reader.GetString(0));
+            }
+        }
+
+        linkColumns.ShouldBe(
+            ["UserId uuid YES", "InvitedEmail character varying(254) YES", "InvitedAt timestamp with time zone YES"],
+            ignoreOrder: true);
+
+        var memberUserIndex = await IndexDefinitionAsync(connection, "group_members", "IX_group_members_group_user", ct);
+        memberUserIndex.ShouldContain("CREATE UNIQUE INDEX");
+        memberUserIndex.ShouldContain("(\"GroupId\", \"UserId\")");
+        memberUserIndex.ShouldContain("WHERE (\"UserId\" IS NOT NULL)");
+
+        var invitedEmailIndex = await IndexDefinitionAsync(
+            connection,
+            "group_members",
+            "IX_group_members_invited_email",
+            ct);
+        invitedEmailIndex.ShouldStartWith("CREATE INDEX");
+        invitedEmailIndex.ShouldContain("(\"InvitedEmail\")");
+        invitedEmailIndex.ShouldContain("WHERE (\"InvitedEmail\" IS NOT NULL)");
+
+        await using var memberUserForeignKey = new NpgsqlCommand(
+            """
+            SELECT confdeltype::text FROM pg_constraint
+            WHERE contype = 'f' AND conrelid = 'group_members'::regclass AND confrelid = '"AspNetUsers"'::regclass
+            """,
+            connection);
+        (await memberUserForeignKey.ExecuteScalarAsync(ct)).ShouldBe("n");
+
         await using var index = new NpgsqlCommand(
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'IX_tags_user_name'",
             connection);
@@ -314,6 +358,21 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
 
     private static AppDbContext NewContext(string connectionString) =>
         new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connectionString).Options);
+
+    private static async Task<string> IndexDefinitionAsync(
+        NpgsqlConnection connection,
+        string table,
+        string name,
+        CancellationToken ct)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT indexdef FROM pg_indexes WHERE tablename = @table AND indexname = @name",
+            connection);
+        command.Parameters.AddWithValue("table", table);
+        command.Parameters.AddWithValue("name", name);
+        var definition = (string?)await command.ExecuteScalarAsync(ct);
+        return definition.ShouldNotBeNull(name);
+    }
 
     private static async Task Insert(NpgsqlConnection connection, CancellationToken ct)
     {

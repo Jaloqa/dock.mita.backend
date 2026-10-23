@@ -45,7 +45,10 @@ public sealed class GroupsTests(MitaApiFactory factory) : IClassFixture<MitaApiF
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
         body.EnumerateObject().Select(property => property.Name).ShouldBe(
-            ["id", "name", "currency", "currencyLocked", "total", "members", "categories", "shareToken"]);
+            [
+                "id", "name", "currency", "currencyLocked", "total", "members", "categories", "shareToken", "role",
+                "myMemberId"
+            ]);
         var id = body.GetProperty("id").GetGuid();
         response.Headers.Location!.ToString().ShouldBe($"{GroupsPath}/{id}");
         body.GetProperty("name").GetString().ShouldBe("Albania 2026");
@@ -53,11 +56,21 @@ public sealed class GroupsTests(MitaApiFactory factory) : IClassFixture<MitaApiF
         body.GetProperty("currencyLocked").GetBoolean().ShouldBeFalse();
         body.GetProperty("total").GetInt64().ShouldBe(0);
         body.GetProperty("shareToken").ValueKind.ShouldBe(JsonValueKind.Null);
+        body.GetProperty("role").GetString().ShouldBe("owner");
+        body.GetProperty("myMemberId").ValueKind.ShouldBe(JsonValueKind.Null);
 
         var members = body.GetProperty("members").EnumerateArray().ToList();
         members.Select(member => member.GetProperty("name").GetString()).ShouldBe(["Anna", "Olya", "Max"]);
         members.Select(member => member.GetProperty("inUse").GetBoolean()).ShouldBe([false, false, false]);
-        members.ShouldAllBe(member => member.EnumerateObject().Count() == 3);
+        foreach (var member in members)
+        {
+            member.EnumerateObject().Select(property => property.Name)
+                .ShouldBe(["id", "name", "inUse", "linked", "linkedName", "invitedEmail"]);
+            member.GetProperty("linked").GetBoolean().ShouldBeFalse();
+            member.GetProperty("linkedName").ValueKind.ShouldBe(JsonValueKind.Null);
+            member.GetProperty("invitedEmail").ValueKind.ShouldBe(JsonValueKind.Null);
+        }
+
         members.Select(member => member.GetProperty("id").GetGuid()).Distinct().Count().ShouldBe(3);
 
         var categories = body.GetProperty("categories").EnumerateArray().ToList();
@@ -123,11 +136,17 @@ public sealed class GroupsTests(MitaApiFactory factory) : IClassFixture<MitaApiF
         page.GetProperty("total").GetInt32().ShouldBe(2);
         var items = page.GetProperty("items").EnumerateArray().ToList();
         items.Select(item => item.GetProperty("id").GetGuid()).ShouldBe([second.Id, first.Id]);
-        items.ShouldAllBe(item => item.EnumerateObject().Count() == 5);
+        foreach (var item in items)
+        {
+            item.EnumerateObject().Select(property => property.Name)
+                .ShouldBe(["id", "name", "currency", "members", "total", "role"]);
+        }
+
         items.Select(item => item.GetProperty("name").GetString()).ShouldBe(["Second", "First"]);
         items.Select(item => item.GetProperty("currency").GetString()).ShouldBe(["PLN", "EUR"]);
         items.Select(item => item.GetProperty("members").GetInt32()).ShouldBe([3, 3]);
         items.Select(item => item.GetProperty("total").GetInt64()).ShouldBe([0L, 12_000L]);
+        items.Select(item => item.GetProperty("role").GetString()).ShouldBe(["owner", "owner"]);
 
         using var foreign = await other.Http.GetAsync(GroupsPath, Ct);
 
@@ -306,6 +325,8 @@ public sealed class GroupsTests(MitaApiFactory factory) : IClassFixture<MitaApiF
         await TestData.AddGroupExpenseAsync(factory, group, members[1], 600, [members[2]], deleted: true);
         await TestData.AddGroupRepaymentAsync(factory, group, members[2], members[0], 1_500);
         await AddCategorisedExpenseAsync(group, members[1]);
+        await TestData.LinkMemberAsync(factory, members[0], userId);
+        await TestData.InviteMemberAsync(factory, members[2], "max@example.com");
 
         (await RowCountsAsync(group.Id)).ShouldBe([1, 3, 1, 3, 7, 1, 5]);
 

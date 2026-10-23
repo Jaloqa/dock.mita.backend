@@ -13,7 +13,7 @@ public static class DeleteExpenseEndpoint
         group.MapDelete(
                 "/groups/{id:guid}/expenses/{expenseId:guid}",
                 (Guid id, Guid expenseId, IMediator mediator, CancellationToken ct) =>
-                    DeleteAsync(GroupScope.Owner(id), expenseId, mediator, ct))
+                    DeleteAsync(GroupScope.User(id), expenseId, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;

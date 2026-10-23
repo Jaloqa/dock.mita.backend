@@ -20,6 +20,14 @@ public static class GroupWire
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
     };
 
+    public static string ToWire(GroupRole role) => role switch
+    {
+        GroupRole.Owner => "owner",
+        GroupRole.Member => "member",
+        GroupRole.Link => "link",
+        _ => throw new ArgumentOutOfRangeException(nameof(role), role, null)
+    };
+
     public static string ToWireCategory(string? standardCategory, Guid? categoryId) =>
         standardCategory
         ?? categoryId?.ToString()

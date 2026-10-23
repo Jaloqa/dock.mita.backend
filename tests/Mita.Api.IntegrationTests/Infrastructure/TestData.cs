@@ -281,6 +281,18 @@ public static class TestData
         return (group, rows);
     }
 
+    public static Task LinkMemberAsync(WebApplicationFactory<Program> factory, GroupMember member, Guid userId) =>
+        ChangeMemberAsync(factory, member, (stored, _) => stored.LinkTo(userId));
+
+    public static Task UnlinkMemberAsync(WebApplicationFactory<Program> factory, GroupMember member) =>
+        ChangeMemberAsync(factory, member, (stored, _) => stored.Unlink());
+
+    public static Task InviteMemberAsync(WebApplicationFactory<Program> factory, GroupMember member, string email) =>
+        ChangeMemberAsync(
+            factory,
+            member,
+            (stored, clock) => stored.Invite(email.Trim().ToLowerInvariant(), clock.GetUtcNow()));
+
     public static async Task<GroupExpense> AddGroupExpenseAsync(
         WebApplicationFactory<Program> factory,
         Group group,
@@ -398,6 +410,20 @@ public static class TestData
                 GroupEntryEvent.Create(group.Id, kind, entryId, GroupEntryAction.Deleted, at, owner, state));
         }
 
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static async Task ChangeMemberAsync(
+        WebApplicationFactory<Program> factory,
+        GroupMember member,
+        Action<GroupMember, TimeProvider> change)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var stored = await db.GroupMembers.SingleAsync(
+            row => row.Id == member.Id,
+            TestContext.Current.CancellationToken);
+        change(stored, scope.ServiceProvider.GetRequiredService<TimeProvider>());
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 

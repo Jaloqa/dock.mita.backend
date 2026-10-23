@@ -17,10 +17,11 @@ public sealed class ListGroupsHandler(AppDbContext db, ICurrentUser currentUser)
         var userId = currentUser.Id;
 
         return await db.Groups.AsNoTracking()
-            .Where(group => group.OwnerId == userId)
+            .Where(group => group.OwnerId == userId
+                || db.GroupMembers.Any(member => member.GroupId == group.Id && member.UserId == userId))
             .OrderByDescending(group => group.CreatedAt)
             .ThenByDescending(group => group.Id)
-            .ProjectSummaries(db)
+            .ProjectSummaries(db, userId)
             .ToPageAsync(new PageRequest(query.Page, query.PageSize), cancellationToken);
     }
 }

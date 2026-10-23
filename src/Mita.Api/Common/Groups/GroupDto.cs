@@ -8,4 +8,6 @@ public sealed record GroupDto(
     long Total,
     IReadOnlyList<GroupMemberDto> Members,
     IReadOnlyList<GroupCategoryDto> Categories,
-    string? ShareToken);
+    string? ShareToken,
+    string Role,
+    Guid? MyMemberId);

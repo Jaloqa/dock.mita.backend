@@ -187,7 +187,7 @@ public sealed class CreateExpenseValidatorTests
     {
         var request = JsonSerializer.Deserialize<CreateExpenseRequest>(json, JsonSerializerOptions.Web)!;
         var command = new CreateExpenseCommand(
-            GroupScope.Owner(Guid.NewGuid()),
+            GroupScope.User(Guid.NewGuid()),
             request.PayerId,
             request.Amount,
             request.Currency,
