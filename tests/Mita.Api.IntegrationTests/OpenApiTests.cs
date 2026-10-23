@@ -213,6 +213,27 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
     }
 
     [Fact]
+    public async Task Should_DescribeGroups()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/groups", out var groups).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}", out var group).ShouldBeTrue();
+
+        TagOf(groups.GetProperty("get")).ShouldBe("Groups");
+        TagOf(groups.GetProperty("post")).ShouldBe("Groups");
+        TagOf(group.GetProperty("get")).ShouldBe("Groups");
+        TagOf(group.GetProperty("put")).ShouldBe("Groups");
+        TagOf(group.GetProperty("delete")).ShouldBe("Groups");
+        ParameterNames(groups.GetProperty("get")).ShouldContain("pageSize");
+    }
+
+    [Fact]
     public async Task Should_DescribeOverviewAndReports()
     {
         using var client = factory.CreateClient();

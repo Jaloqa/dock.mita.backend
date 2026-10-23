@@ -1,0 +1,24 @@
+using Mita.Api.Extensions;
+using Mita.Api.Features.Groups.CreateGroup;
+using Mita.Api.Features.Groups.DeleteGroup;
+using Mita.Api.Features.Groups.GetGroup;
+using Mita.Api.Features.Groups.ListGroups;
+using Mita.Api.Features.Groups.UpdateGroup;
+
+namespace Mita.Api.Features.Groups;
+
+public static class GroupsEndpoints
+{
+    public static IEndpointRouteBuilder MapGroupsEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapV1()
+            .WithTags("Groups")
+            .MapListGroups()
+            .MapCreateGroup()
+            .MapGetGroup()
+            .MapUpdateGroup()
+            .MapDeleteGroup();
+
+        return app;
+    }
+}
