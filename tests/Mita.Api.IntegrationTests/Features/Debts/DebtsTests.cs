@@ -393,12 +393,13 @@ public sealed class DebtsTests(MitaApiFactory factory) : IClassFixture<MitaApiFa
     private static void ShouldHaveSummary(JsonElement summary, long owedToMe, long owedByMe, int open, int overdue)
     {
         summary.EnumerateObject().Select(property => property.Name).ShouldBe(
-            ["owedToMe", "owedByMe", "open", "overdue"],
+            ["owedToMe", "owedByMe", "open", "overdue", "groups"],
             ignoreOrder: true);
         summary.GetProperty("owedToMe").GetInt64().ShouldBe(owedToMe);
         summary.GetProperty("owedByMe").GetInt64().ShouldBe(owedByMe);
         summary.GetProperty("open").GetInt32().ShouldBe(open);
         summary.GetProperty("overdue").GetInt32().ShouldBe(overdue);
+        summary.GetProperty("groups").GetInt32().ShouldBe(0);
     }
 
     private static Dictionary<string, object?> Body(

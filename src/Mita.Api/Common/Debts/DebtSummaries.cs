@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Mita.Api.Common.Groups;
 using Mita.Api.Common.Rates;
 using Mita.Domain.Debts;
 using Mita.Domain.Money;
@@ -15,7 +16,7 @@ public static class DebtSummaries
         DateOnly today,
         CancellationToken ct)
     {
-        var groups = await db.Debts.AsNoTracking()
+        var debts = await db.Debts.AsNoTracking()
             .Where(debt => debt.UserId == userId && debt.Repaid < debt.Amount)
             .GroupBy(debt => new { debt.Direction, debt.Currency })
             .Select(group => new
@@ -28,24 +29,33 @@ public static class DebtSummaries
             })
             .ToListAsync(ct);
 
-        IReadOnlyDictionary<Currency, decimal>? plnValues = groups.Any(group => group.Currency != baseCurrency)
-            ? await db.PlnValuesAsync(today, ct)
-            : null;
+        var groups = (await db.LinkedBalancesAsync(userId, ct))
+            .Where(group => group.Balance != 0)
+            .ToList();
+
+        IReadOnlyDictionary<Currency, decimal>? plnValues =
+            debts.Any(debt => debt.Currency != baseCurrency) || groups.Any(group => group.Currency != baseCurrency)
+                ? await db.PlnValuesAsync(today, ct)
+                : null;
+
+        long? InBase(long amount, Currency currency)
+        {
+            var rate = currency == baseCurrency ? 1m : RateTable.Rate(plnValues!, currency, baseCurrency);
+            return rate is { } found ? MinorUnits.Convert(amount, found, currency, baseCurrency) : null;
+        }
 
         long owedToMe = 0;
         long owedByMe = 0;
         var open = 0;
         var overdue = 0;
-        foreach (var group in groups)
+        foreach (var debt in debts)
         {
-            var rate = group.Currency == baseCurrency ? 1m : RateTable.Rate(plnValues!, group.Currency, baseCurrency);
-            if (rate is not { } found)
+            if (InBase(debt.Remaining, debt.Currency) is not { } converted)
             {
                 return null;
             }
 
-            var converted = MinorUnits.Convert(group.Remaining, found, group.Currency, baseCurrency);
-            if (group.Direction == DebtDirection.Lent)
+            if (debt.Direction == DebtDirection.Lent)
             {
                 owedToMe += converted;
             }
@@ -54,10 +64,27 @@ public static class DebtSummaries
                 owedByMe += converted;
             }
 
-            open += group.Open;
-            overdue += group.Overdue;
+            open += debt.Open;
+            overdue += debt.Overdue;
         }
 
-        return new DebtSummaryDto(owedToMe, owedByMe, open, overdue);
+        foreach (var group in groups)
+        {
+            if (InBase(Math.Abs(group.Balance), group.Currency) is not { } converted)
+            {
+                return null;
+            }
+
+            if (group.Balance > 0)
+            {
+                owedToMe += converted;
+            }
+            else
+            {
+                owedByMe += converted;
+            }
+        }
+
+        return new DebtSummaryDto(owedToMe, owedByMe, open, overdue, groups.Count);
     }
 }

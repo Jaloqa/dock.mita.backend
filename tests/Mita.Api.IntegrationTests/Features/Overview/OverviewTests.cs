@@ -69,7 +69,7 @@ public sealed class OverviewTests(MitaApiFactory factory) : IClassFixture<MitaAp
             ignoreOrder: true);
         Names(overview.GetProperty("balance")).ShouldBe(["amount", "accounts"], ignoreOrder: true);
         Names(overview.GetProperty("debts")).ShouldBe(
-            ["owedToMe", "owedByMe", "open", "overdue"],
+            ["owedToMe", "owedByMe", "open", "overdue", "groups"],
             ignoreOrder: true);
         Names(overview.GetProperty("income")).ShouldBe(["amount", "count", "change"], ignoreOrder: true);
         Names(overview.GetProperty("expense")).ShouldBe(["amount", "count", "change"], ignoreOrder: true);
@@ -559,6 +559,8 @@ public sealed class OverviewTests(MitaApiFactory factory) : IClassFixture<MitaAp
         var overview = await GetOverviewAsync(intruder, string.Empty);
 
         Balance(overview).ShouldBe((0L, 0));
+        Debts(overview).ShouldBe((0L, 0L, 0, 0));
+        overview.GetProperty("debts").GetProperty("groups").GetInt32().ShouldBe(0);
         Total(overview.GetProperty("income")).ShouldBe((0L, 0, (double?)null));
         Total(overview.GetProperty("expense")).ShouldBe((0L, 0, (double?)null));
         overview.GetProperty("income").GetProperty("change").ValueKind.ShouldBe(JsonValueKind.Null);
