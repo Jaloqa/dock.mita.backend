@@ -126,7 +126,7 @@ public sealed class CreateGroupRepaymentValidatorTests
     {
         var request = JsonSerializer.Deserialize<CreateGroupRepaymentRequest>(json, JsonSerializerOptions.Web)!;
         var command = new CreateGroupRepaymentCommand(
-            GroupScope.Owner(Guid.NewGuid()),
+            GroupScope.User(Guid.NewGuid()),
             request.FromMemberId,
             request.ToMemberId,
             request.Amount,

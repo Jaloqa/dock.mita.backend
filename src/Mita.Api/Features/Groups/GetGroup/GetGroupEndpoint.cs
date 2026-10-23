@@ -12,7 +12,7 @@ public static class GetGroupEndpoint
         group.MapGet(
                 "/groups/{id:guid}",
                 async (Guid id, IMediator mediator, CancellationToken ct) =>
-                    (await mediator.Send(new GetGroupQuery(GroupScope.Owner(id)), ct)).ToHttp(found => Results.Ok(found)))
+                    (await mediator.Send(new GetGroupQuery(GroupScope.User(id)), ct)).ToHttp(found => Results.Ok(found)))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;

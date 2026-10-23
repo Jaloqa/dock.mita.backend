@@ -36,6 +36,6 @@ public sealed class UpdateGroupHandler(AppDbContext db, GroupAccess access)
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return await db.LoadAsync(group.Id, includeShareToken: true, cancellationToken);
+        return await db.LoadAsync(context, cancellationToken);
     }
 }

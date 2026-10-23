@@ -17,7 +17,7 @@ public static class UpdateGroupRepaymentEndpoint
                     Guid repaymentId,
                     UpdateGroupRepaymentRequest? request,
                     IMediator mediator,
-                    CancellationToken ct) => UpdateAsync(GroupScope.Owner(id), repaymentId, request, mediator, ct))
+                    CancellationToken ct) => UpdateAsync(GroupScope.User(id), repaymentId, request, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;

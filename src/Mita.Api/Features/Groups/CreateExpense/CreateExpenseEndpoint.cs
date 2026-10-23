@@ -13,7 +13,7 @@ public static class CreateExpenseEndpoint
         group.MapPost(
                 "/groups/{id:guid}/expenses",
                 (Guid id, CreateExpenseRequest? request, IMediator mediator, CancellationToken ct) =>
-                    CreateAsync(GroupScope.Owner(id), request, mediator, ct))
+                    CreateAsync(GroupScope.User(id), request, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;

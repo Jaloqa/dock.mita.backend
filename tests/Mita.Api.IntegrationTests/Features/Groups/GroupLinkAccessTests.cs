@@ -33,8 +33,10 @@ public sealed class GroupLinkAccessTests(MitaApiFactory factory) : IClassFixture
     {
         await using var isolated = factory.WithIsolatedData();
         using var owner = new AuthClient(isolated);
-        await owner.RegisterNewAsync(Ct);
+        var credentials = await owner.RegisterNewAsync(Ct);
         var shared = await SeedSharedGroupAsync(isolated, owner, "Albania 2026");
+        await TestData.LinkMemberAsync(isolated, shared.Members[0], await UserIdAsync(owner));
+        await TestData.InviteMemberAsync(isolated, shared.Members[2], "max@example.com");
         await TestData.AddRatesAsync(
             isolated,
             (Currency.EUR, IsoDay(Today), 4.30m),
@@ -46,10 +48,25 @@ public sealed class GroupLinkAccessTests(MitaApiFactory factory) : IClassFixture
         groupResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         var linkGroup = await ReadNodeAsync(groupResponse);
         linkGroup["shareToken"].ShouldBeNull();
-        linkGroup["members"]!.AsArray().Count.ShouldBe(3);
+        linkGroup["role"]!.GetValue<string>().ShouldBe("link");
+        linkGroup["myMemberId"].ShouldBeNull();
+        linkGroup["members"]!.AsArray().Select(member => member!["linked"]!.GetValue<bool>())
+            .ShouldBe([true, false, false]);
         var ownerGroup = await OwnerNodeAsync(owner, GroupPath(shared.GroupId));
         ownerGroup["shareToken"]!.GetValue<string>().ShouldBe(shared.Token);
+        ownerGroup["role"]!.GetValue<string>().ShouldBe("owner");
+        ownerGroup["myMemberId"]!.GetValue<string>().ShouldBe(shared.Members[0].Id.ToString());
+        ownerGroup["members"]![0]!["linkedName"]!.GetValue<string>().ShouldBe(credentials.Name);
+        ownerGroup["members"]![2]!["invitedEmail"]!.GetValue<string>().ShouldBe("max@example.com");
         ownerGroup["shareToken"] = null;
+        ownerGroup["role"] = "link";
+        ownerGroup["myMemberId"] = null;
+        foreach (var member in ownerGroup["members"]!.AsArray())
+        {
+            member!["linkedName"] = null;
+            member["invitedEmail"] = null;
+        }
+
         linkGroup.ToJsonString().ShouldBe(ownerGroup.ToJsonString());
 
         var reads = new (string Link, string Owner, int Items)[]
@@ -139,7 +156,7 @@ public sealed class GroupLinkAccessTests(MitaApiFactory factory) : IClassFixture
         using var renameMember = await link.SendAsync(
             HttpMethod.Put,
             shared.Token,
-            $"/members/{shared.MemberIds[0]}",
+            $"/members/{shared.Members[0].Id}",
             new { name = "Eve" });
         using var shareOn = await link.SendAsync(HttpMethod.Post, shared.Token, "/share");
         using var shareOff = await link.SendAsync(HttpMethod.Delete, shared.Token, "/share");
@@ -173,6 +190,8 @@ public sealed class GroupLinkAccessTests(MitaApiFactory factory) : IClassFixture
         await owner.RegisterNewAsync(Ct);
         await visitor.RegisterNewAsync(Ct);
         var shared = await SeedSharedGroupAsync(factory, owner, "Trip");
+        await TestData.LinkMemberAsync(factory, shared.Members[0], await UserIdAsync(owner));
+        await TestData.InviteMemberAsync(factory, shared.Members[2], "max@example.com");
 
         using var visitorLink = await visitor.Http.GetAsync(LinkClient.PathOf(shared.Token), Ct);
         using var visitorOwnerRoute = await visitor.Http.GetAsync(GroupPath(shared.GroupId), Ct);
@@ -182,14 +201,15 @@ public sealed class GroupLinkAccessTests(MitaApiFactory factory) : IClassFixture
         visitorLink.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await visitorLink.Content.ReadFromJsonAsync<JsonElement>(Ct);
         body.GetProperty("id").GetGuid().ShouldBe(shared.GroupId);
-        body.GetProperty("shareToken").ValueKind.ShouldBe(JsonValueKind.Null);
+        ShouldBeLinkView(body);
         visitorOwnerRoute.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         visitorUnknownLink.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await visitorUnknownLink.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("title").GetString()
             .ShouldBe("Not Found");
         ownerLink.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await ownerLink.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("shareToken").ValueKind
-            .ShouldBe(JsonValueKind.Null);
+        var ownerBody = await ownerLink.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        ShouldBeLinkView(ownerBody);
+        ownerBody.GetRawText().ShouldBe(body.GetRawText());
     }
 
     [Fact]
@@ -301,6 +321,17 @@ public sealed class GroupLinkAccessTests(MitaApiFactory factory) : IClassFixture
         ]);
     }
 
+    private static void ShouldBeLinkView(JsonElement group)
+    {
+        group.GetProperty("shareToken").ValueKind.ShouldBe(JsonValueKind.Null);
+        group.GetProperty("role").GetString().ShouldBe("link");
+        group.GetProperty("myMemberId").ValueKind.ShouldBe(JsonValueKind.Null);
+        var members = group.GetProperty("members").EnumerateArray().ToList();
+        members.Select(member => member.GetProperty("linked").GetBoolean()).ShouldBe([true, false, false]);
+        members.ShouldAllBe(member => member.GetProperty("linkedName").ValueKind == JsonValueKind.Null);
+        members.ShouldAllBe(member => member.GetProperty("invitedEmail").ValueKind == JsonValueKind.Null);
+    }
+
     private static async Task ShouldBeNotFoundProblemAsync(LinkClient link, string token, string path)
     {
         using var response = await link.GetAsync(token, path);
@@ -323,7 +354,7 @@ public sealed class GroupLinkAccessTests(MitaApiFactory factory) : IClassFixture
         await TestData.AddGroupExpenseAsync(app, group, members[2], 1_500, members, "2026-10-03", deleted: true);
         var repayment = await TestData.AddGroupRepaymentAsync(app, group, members[2], members[0], 2_000);
         var token = await ShareAsync(owner, group.Id);
-        return new SharedGroup(group.Id, [.. members.Select(member => member.Id)], expense.Id, repayment.Id, token);
+        return new SharedGroup(group.Id, members, expense.Id, repayment.Id, token);
     }
 
     private static async Task<string> ShareAsync(AuthClient owner, Guid groupId)
@@ -378,7 +409,7 @@ public sealed class GroupLinkAccessTests(MitaApiFactory factory) : IClassFixture
                 .. logEvent.Properties.Select(property => $"{property.Key}={property.Value}")
             ]);
 
-    private sealed record SharedGroup(Guid GroupId, Guid[] MemberIds, Guid ExpenseId, Guid RepaymentId, string Token);
+    private sealed record SharedGroup(Guid GroupId, GroupMember[] Members, Guid ExpenseId, Guid RepaymentId, string Token);
 
     private sealed class CapturingSink : ILogEventSink
     {

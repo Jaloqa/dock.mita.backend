@@ -12,7 +12,7 @@ public static class GetGroupBalancesEndpoint
         group.MapGet(
                 "/groups/{id:guid}/balances",
                 async (Guid id, IMediator mediator, CancellationToken ct, string? currency = null) =>
-                    (await mediator.Send(new GetGroupBalancesQuery(GroupScope.Owner(id), currency), ct))
+                    (await mediator.Send(new GetGroupBalancesQuery(GroupScope.User(id), currency), ct))
                         .ToHttp(balances => Results.Ok(balances)))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 

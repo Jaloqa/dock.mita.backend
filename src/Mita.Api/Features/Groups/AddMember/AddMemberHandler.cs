@@ -45,7 +45,7 @@ public sealed class AddMemberHandler(AppDbContext db, GroupAccess access)
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return new GroupMemberDto(added.Id, added.Name, false);
+        return new GroupMemberDto(added.Id, added.Name, false, false, null, null);
     }
 
     private static Error Rejected(string code) =>

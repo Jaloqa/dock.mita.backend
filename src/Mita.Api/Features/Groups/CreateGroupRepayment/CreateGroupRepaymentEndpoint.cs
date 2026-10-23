@@ -13,7 +13,7 @@ public static class CreateGroupRepaymentEndpoint
         group.MapPost(
                 "/groups/{id:guid}/repayments",
                 (Guid id, CreateGroupRepaymentRequest? request, IMediator mediator, CancellationToken ct) =>
-                    CreateAsync(GroupScope.Owner(id), request, mediator, ct))
+                    CreateAsync(GroupScope.User(id), request, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;

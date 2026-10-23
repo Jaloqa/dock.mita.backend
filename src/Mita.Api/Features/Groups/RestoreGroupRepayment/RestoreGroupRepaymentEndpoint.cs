@@ -13,7 +13,7 @@ public static class RestoreGroupRepaymentEndpoint
         group.MapPost(
                 "/groups/{id:guid}/repayments/{repaymentId:guid}/restore",
                 (Guid id, Guid repaymentId, IMediator mediator, CancellationToken ct) =>
-                    RestoreAsync(GroupScope.Owner(id), repaymentId, mediator, ct))
+                    RestoreAsync(GroupScope.User(id), repaymentId, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;

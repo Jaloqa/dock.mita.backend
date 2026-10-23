@@ -39,8 +39,14 @@ public sealed class RenameMemberHandler(AppDbContext db, GroupAccess access)
         renamed.Rename(name);
         await db.SaveChangesAsync(cancellationToken);
         var inUse = await db.UsedMemberIds(context.GroupId).ContainsAsync(renamed.Id, cancellationToken);
+        var linkedName = renamed.UserId is { } userId
+            ? await db.Users.AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.Name)
+                .SingleOrDefaultAsync(cancellationToken)
+            : null;
         await transaction.CommitAsync(cancellationToken);
 
-        return new GroupMemberDto(renamed.Id, renamed.Name, inUse);
+        return new GroupMemberDto(renamed.Id, renamed.Name, inUse, renamed.IsLinked, linkedName, renamed.InvitedEmail);
     }
 }

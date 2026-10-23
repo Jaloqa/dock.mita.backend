@@ -20,11 +20,13 @@ public sealed class CreateGroupHandler(AppDbContext db, ICurrentUser currentUser
             throw new InvalidOperationException("The currency reached the handler without passing validation.");
         }
 
-        var group = Group.Create(currentUser.Id, name, currency);
+        var ownerId = currentUser.Id;
+        var group = Group.Create(ownerId, name, currency);
         db.Groups.Add(group);
         db.GroupMembers.AddRange(members.Select((member, position) => GroupMember.Create(group.Id, member, position)));
         await db.SaveChangesAsync(cancellationToken);
 
-        return await db.LoadAsync(group.Id, includeShareToken: true, cancellationToken);
+        var context = new GroupContext(group.Id, ownerId, currency, GroupActor.Owner(ownerId), GroupRole.Owner, null);
+        return await db.LoadAsync(context, cancellationToken);
     }
 }

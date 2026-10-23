@@ -5,12 +5,12 @@ namespace Mita.Api.Common.Groups;
 
 public abstract record GroupScope
 {
-    public static GroupScope Owner(Guid groupId) => new OwnerGroupScope(groupId);
+    public static GroupScope User(Guid groupId) => new UserGroupScope(groupId);
 
     public static GroupScope Link(string token, string? memberHeader) => new LinkGroupScope(token, memberHeader);
 }
 
-public sealed record OwnerGroupScope(Guid GroupId) : GroupScope;
+public sealed record UserGroupScope(Guid GroupId) : GroupScope;
 
 public sealed record LinkGroupScope(string Token, string? MemberHeader) : GroupScope
 {

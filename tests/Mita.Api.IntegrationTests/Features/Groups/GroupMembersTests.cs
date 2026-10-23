@@ -20,6 +20,8 @@ public sealed class GroupMembersTests(MitaApiFactory factory) : IClassFixture<Mi
 
     private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web);
 
+    private static readonly string[] MemberProperties = ["id", "name", "inUse", "linked", "linkedName", "invitedEmail"];
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -34,11 +36,12 @@ public sealed class GroupMembersTests(MitaApiFactory factory) : IClassFixture<Mi
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
         response.Headers.Location.ShouldBeNull();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
-        body.EnumerateObject().Select(property => property.Name).ShouldBe(
-            ["id", "name", "inUse"],
-            ignoreOrder: true);
+        body.EnumerateObject().Select(property => property.Name).ShouldBe(MemberProperties);
         body.GetProperty("name").GetString().ShouldBe("Kasia");
         body.GetProperty("inUse").GetBoolean().ShouldBeFalse();
+        body.GetProperty("linked").GetBoolean().ShouldBeFalse();
+        body.GetProperty("linkedName").ValueKind.ShouldBe(JsonValueKind.Null);
+        body.GetProperty("invitedEmail").ValueKind.ShouldBe(JsonValueKind.Null);
 
         var stored = await StoredMembersAsync(group.Id);
         stored.Select(member => member.Name).ShouldBe(["Anna", "Olya", "Max", "Kasia"]);
@@ -121,22 +124,25 @@ public sealed class GroupMembersTests(MitaApiFactory factory) : IClassFixture<Mi
     public async Task Should_RenameMember()
     {
         using var client = new AuthClient(factory);
-        await client.RegisterNewAsync(Ct);
+        var credentials = await client.RegisterNewAsync(Ct);
         var userId = await UserIdAsync(client);
         var (group, members) = await TestData.AddGroupAsync(factory, userId, "Trip");
         await TestData.AddGroupExpenseAsync(factory, group, members[0], 900, [members[0], members[2]]);
+        await TestData.LinkMemberAsync(factory, members[1], userId);
+        await TestData.InviteMemberAsync(factory, members[0], "anna@example.com");
         var (other, otherMembers) = await TestData.AddGroupAsync(factory, userId, "Other");
 
         using var renamed = await SendAsync(client, HttpMethod.Put, MemberPath(group.Id, members[1].Id), new { name = "Ola" });
 
         renamed.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await renamed.Content.ReadFromJsonAsync<JsonElement>(Ct);
-        body.EnumerateObject().Select(property => property.Name).ShouldBe(
-            ["id", "name", "inUse"],
-            ignoreOrder: true);
+        body.EnumerateObject().Select(property => property.Name).ShouldBe(MemberProperties);
         body.GetProperty("id").GetGuid().ShouldBe(members[1].Id);
         body.GetProperty("name").GetString().ShouldBe("Ola");
         body.GetProperty("inUse").GetBoolean().ShouldBeFalse();
+        body.GetProperty("linked").GetBoolean().ShouldBeTrue();
+        body.GetProperty("linkedName").GetString().ShouldBe(credentials.Name);
+        body.GetProperty("invitedEmail").ValueKind.ShouldBe(JsonValueKind.Null);
 
         using var otherCase = await SendAsync(client, HttpMethod.Put, MemberPath(group.Id, members[1].Id), new { name = " OLA " });
 
@@ -151,7 +157,11 @@ public sealed class GroupMembersTests(MitaApiFactory factory) : IClassFixture<Mi
         using var inUse = await SendAsync(client, HttpMethod.Put, MemberPath(group.Id, members[0].Id), new { name = "Hanna" });
 
         inUse.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await inUse.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("inUse").GetBoolean().ShouldBeTrue();
+        var inUseBody = await inUse.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        inUseBody.GetProperty("inUse").GetBoolean().ShouldBeTrue();
+        inUseBody.GetProperty("linked").GetBoolean().ShouldBeFalse();
+        inUseBody.GetProperty("linkedName").ValueKind.ShouldBe(JsonValueKind.Null);
+        inUseBody.GetProperty("invitedEmail").GetString().ShouldBe("anna@example.com");
 
         using var foreignMember = await SendAsync(
             client,
@@ -175,11 +185,13 @@ public sealed class GroupMembersTests(MitaApiFactory factory) : IClassFixture<Mi
     {
         using var client = new AuthClient(factory);
         await client.RegisterNewAsync(Ct);
+        var userId = await UserIdAsync(client);
         var (group, members) = await TestData.AddGroupAsync(
-            factory, await UserIdAsync(client), "Trip", Currency.EUR, "Payer", "Sharer", "Sender", "Receiver", "Actor", "Idle");
+            factory, userId, "Trip", Currency.EUR, "Payer", "Sharer", "Sender", "Receiver", "Actor", "Idle");
         await TestData.AddGroupExpenseAsync(factory, group, members[0], 1_000, [members[1]], deleted: true);
         await TestData.AddGroupRepaymentAsync(factory, group, members[2], members[3], 300);
         await AddEventAsync(group, members[4]);
+        await TestData.LinkMemberAsync(factory, members[5], userId);
 
         foreach (var used in members[..5])
         {

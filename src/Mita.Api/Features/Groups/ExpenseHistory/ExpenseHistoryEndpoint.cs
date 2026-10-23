@@ -12,7 +12,7 @@ public static class ExpenseHistoryEndpoint
         group.MapGet(
                 "/groups/{id:guid}/expenses/{expenseId:guid}/history",
                 async (Guid id, Guid expenseId, IMediator mediator, CancellationToken ct, int page = 1, int pageSize = 100) =>
-                    (await mediator.Send(new ExpenseHistoryQuery(GroupScope.Owner(id), expenseId, page, pageSize), ct))
+                    (await mediator.Send(new ExpenseHistoryQuery(GroupScope.User(id), expenseId, page, pageSize), ct))
                         .ToHttp(history => Results.Ok(history)))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
