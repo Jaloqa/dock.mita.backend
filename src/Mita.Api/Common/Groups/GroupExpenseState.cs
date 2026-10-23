@@ -1,6 +1,8 @@
+using Microsoft.EntityFrameworkCore;
 using Mita.Api.Common.Money;
 using Mita.Api.Common.Wire;
 using Mita.Domain.Groups;
+using Mita.Infrastructure.Persistence;
 
 namespace Mita.Api.Common.Groups;
 
@@ -18,6 +20,17 @@ public sealed record GroupExpenseState(
     string Split,
     IReadOnlyList<GroupShareDto> Shares)
 {
+    public static async Task<GroupExpenseState> CaptureAsync(AppDbContext db, GroupExpense expense, CancellationToken ct)
+    {
+        var memberOrder = await db.GroupMembers.AsNoTracking()
+            .Where(member => member.GroupId == expense.GroupId)
+            .OrderBy(member => member.Position)
+            .Select(member => member.Id)
+            .ToListAsync(ct);
+
+        return From(expense, memberOrder);
+    }
+
     public static GroupExpenseState From(GroupExpense expense, IReadOnlyList<Guid> memberOrder)
     {
         var positions = memberOrder.Select((memberId, position) => (memberId, position))

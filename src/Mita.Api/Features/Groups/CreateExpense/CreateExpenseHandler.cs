@@ -36,7 +36,7 @@ public sealed class CreateExpenseHandler(AppDbContext db, GroupAccess access, Gr
             GroupEntryKind.Expense,
             expense.Id,
             GroupEntryAction.Created,
-            GroupExpenseState.From(expense, [.. details.Shares.Select(share => share.MemberId)]),
+            await GroupExpenseState.CaptureAsync(db, expense, cancellationToken),
             time.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
