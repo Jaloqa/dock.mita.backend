@@ -227,6 +227,8 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         paths.TryGetProperty("/v1/groups/{id}/share", out var share).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/members", out var members).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/members/{memberId}", out var member).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/members/{memberId}/link", out var memberLink).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/members/{memberId}/invite", out var memberInvite).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/categories", out var categories).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/expenses", out var expenses).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/expenses/{expenseId}", out var expense).ShouldBeTrue();
@@ -249,6 +251,10 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(members.GetProperty("post")).ShouldBe("Groups");
         TagOf(member.GetProperty("put")).ShouldBe("Groups");
         TagOf(member.GetProperty("delete")).ShouldBe("Groups");
+        TagOf(memberLink.GetProperty("put")).ShouldBe("Groups");
+        TagOf(memberLink.GetProperty("delete")).ShouldBe("Groups");
+        TagOf(memberInvite.GetProperty("put")).ShouldBe("Groups");
+        TagOf(memberInvite.GetProperty("delete")).ShouldBe("Groups");
         TagOf(categories.GetProperty("post")).ShouldBe("Groups");
         TagOf(expenses.GetProperty("get")).ShouldBe("Groups");
         TagOf(expenses.GetProperty("post")).ShouldBe("Groups");
