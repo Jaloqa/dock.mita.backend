@@ -25,6 +25,7 @@ public static class MediatorExtensions
         services.AddScoped<DebtWriter>();
         services.AddScoped<GroupAccess>();
         services.AddScoped<GroupExpenseWriter>();
+        services.AddScoped<GroupRepaymentWriter>();
         services.AddSingleton<IHybridCacheSerializerFactory, ResultCacheSerializerFactory>();
         return services;
     }

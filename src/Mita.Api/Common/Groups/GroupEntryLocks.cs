@@ -29,4 +29,19 @@ public static class GroupEntryLocks
         await db.Entry(expense).Collection(row => row.Shares).LoadAsync(ct);
         return expense;
     }
+
+    public static async Task<GroupRepayment?> LockRepaymentAsync(
+        this AppDbContext db,
+        Guid groupId,
+        Guid repaymentId,
+        bool deleted,
+        CancellationToken ct)
+    {
+        var rows = await db.GroupRepayments
+            .FromSql(
+                $"""SELECT * FROM group_repayments WHERE "Id" = {repaymentId} AND "GroupId" = {groupId} AND ("DeletedAt" IS NOT NULL) = {deleted} FOR UPDATE""")
+            .ToListAsync(ct);
+
+        return rows.SingleOrDefault();
+    }
 }
