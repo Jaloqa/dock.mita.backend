@@ -197,12 +197,15 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var paths = document.RootElement.GetProperty("paths");
         paths.TryGetProperty("/v1/debts", out var debts).ShouldBeTrue();
+        paths.TryGetProperty("/v1/debts/{id}", out var debt).ShouldBeTrue();
         paths.TryGetProperty("/v1/debts/{id}/repayments", out var repayments).ShouldBeTrue();
         paths.TryGetProperty("/v1/debts/{id}/repayments/{repaymentId}", out var repayment).ShouldBeTrue();
 
         TagOf(debts.GetProperty("get")).ShouldBe("Debts");
         TagOf(debts.GetProperty("post")).ShouldBe("Debts");
         ParameterNames(debts.GetProperty("get")).ShouldContain("status");
+        TagOf(debt.GetProperty("put")).ShouldBe("Debts");
+        TagOf(debt.GetProperty("delete")).ShouldBe("Debts");
         TagOf(repayments.GetProperty("get")).ShouldBe("Debts");
         TagOf(repayments.GetProperty("post")).ShouldBe("Debts");
         TagOf(repayment.GetProperty("delete")).ShouldBe("Debts");
