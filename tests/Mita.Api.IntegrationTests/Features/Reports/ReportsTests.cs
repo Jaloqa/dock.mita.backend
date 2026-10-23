@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Mita.Api.IntegrationTests.Infrastructure;
 using Mita.Domain.Categories;
+using Mita.Domain.Debts;
 using Mita.Domain.Money;
 using Mita.Domain.Periods;
 using Mita.Domain.Users;
@@ -195,6 +196,39 @@ public sealed class ReportsTests(MitaApiFactory factory) : IClassFixture<MitaApi
         report.GetProperty("totals").GetProperty("expense").GetInt64().ShouldBe(10_000);
         var items = report.GetProperty("structure").GetProperty("items").EnumerateArray().ToList();
         items.Select(item => item.GetProperty("categoryId").GetGuid()).ShouldBe([groceries.Id]);
+    }
+
+    [Fact]
+    public async Task Should_IgnoreDebts_InReports()
+    {
+        var today = Today;
+        using var client = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+        var userId = await UserIdAsync(client);
+        var lender = await TestData.AddAccountAsync(factory, userId, openingBalance: 100_000);
+        var borrower = await TestData.AddAccountAsync(factory, userId, openingBalance: 20_000);
+        var lent = await TestData.AddDebtAsync(
+            factory, userId, DebtDirection.Lent, 30_000, account: lender, date: Iso(today));
+        var borrowed = await TestData.AddDebtAsync(
+            factory, userId, DebtDirection.Borrowed, 50_000, account: borrower, date: Iso(today.AddDays(-40)));
+        await TestData.AddRepaymentAsync(factory, lent, 10_000, lender, Iso(today));
+        await TestData.AddRepaymentAsync(factory, borrowed, 20_000, borrower, Iso(today.AddDays(-35)));
+
+        var report = await GetReportAsync(client, string.Empty);
+
+        var periods = report.GetProperty("periods").EnumerateArray().ToList();
+        periods.Count.ShouldBe(6);
+        periods.ShouldAllBe(period => period.GetProperty("income").GetInt64() == 0 && period.GetProperty("expense").GetInt64() == 0);
+        var totals = report.GetProperty("totals");
+        totals.GetProperty("income").GetInt64().ShouldBe(0);
+        totals.GetProperty("expense").GetInt64().ShouldBe(0);
+        report.GetProperty("averageIncome").GetInt64().ShouldBe(0);
+        report.GetProperty("averageExpense").GetInt64().ShouldBe(0);
+        report.GetProperty("savingsRate").ValueKind.ShouldBe(JsonValueKind.Null);
+        var structure = report.GetProperty("structure");
+        structure.GetProperty("total").GetInt64().ShouldBe(0);
+        structure.GetProperty("items").GetArrayLength().ShouldBe(0);
+        report.GetProperty("hasTransactions").GetBoolean().ShouldBeFalse();
     }
 
     [Fact]

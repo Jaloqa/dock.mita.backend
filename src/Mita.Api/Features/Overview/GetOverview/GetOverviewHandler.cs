@@ -6,6 +6,7 @@ using Mita.Api.Common;
 using Mita.Api.Common.Accounts;
 using Mita.Api.Common.Budgets;
 using Mita.Api.Common.Categories;
+using Mita.Api.Common.Debts;
 using Mita.Api.Common.Goals;
 using Mita.Api.Common.Money;
 using Mita.Api.Common.Rates;
@@ -49,6 +50,12 @@ public sealed class GetOverviewHandler(AppDbContext db, ICurrentUser currentUser
             return Error.Unavailable("rates.unavailable");
         }
 
+        var debts = await db.SummarizeAsync(userId, baseCurrency, today, cancellationToken);
+        if (debts is null)
+        {
+            return Error.Unavailable("rates.unavailable");
+        }
+
         var period = FinancialPeriod.For(today, monthStart);
         var budgets = await db.BudgetsInAsync(userId, period, baseCurrency, today, cancellationToken);
         if (budgets is null)
@@ -77,6 +84,7 @@ public sealed class GetOverviewHandler(AppDbContext db, ICurrentUser currentUser
             IsoDate.ToWire(previous.To),
             CurrencyWire.ToWire(baseCurrency),
             balance,
+            debts,
             new OverviewTotalResponse(
                 income,
                 incomeCount,
