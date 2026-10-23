@@ -334,20 +334,7 @@ public static class TestData
         var repayment = GroupRepayment.Create(
             group.Id,
             new GroupRepaymentDetails(from.Id, to.Id, amount, group.Currency, ParseDate(date), 1m, false, amount, null));
-        var state = JsonSerializer.Serialize(
-            new
-            {
-                repayment.FromMemberId,
-                repayment.ToMemberId,
-                repayment.Amount,
-                Currency = repayment.Currency.ToString(),
-                repayment.Date,
-                Rate = 1,
-                repayment.RateManual,
-                repayment.GroupAmount,
-                repayment.Note
-            },
-            WireJson);
+        var state = JsonSerializer.Serialize(GroupRepaymentState.From(repayment), WireJson);
 
         await AddEntryAsync(
             factory,

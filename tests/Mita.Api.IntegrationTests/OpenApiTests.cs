@@ -231,6 +231,10 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         paths.TryGetProperty("/v1/groups/{id}/expenses/{expenseId}", out var expense).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/expenses/{expenseId}/restore", out var restore).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/expenses/{expenseId}/history", out var history).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/repayments", out var groupRepayments).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}", out var groupRepayment).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}/restore", out var restoreRepayment).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}/history", out var repaymentHistory).ShouldBeTrue();
 
         TagOf(groups.GetProperty("get")).ShouldBe("Groups");
         TagOf(groups.GetProperty("post")).ShouldBe("Groups");
@@ -251,6 +255,15 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(restore.GetProperty("post")).ShouldBe("Groups");
         TagOf(history.GetProperty("get")).ShouldBe("Groups");
         ParameterNames(history.GetProperty("get")).ShouldContain("pageSize");
+        TagOf(groupRepayments.GetProperty("get")).ShouldBe("Groups");
+        TagOf(groupRepayments.GetProperty("post")).ShouldBe("Groups");
+        ParameterNames(groupRepayments.GetProperty("get")).ShouldContain("deleted");
+        ParameterNames(groupRepayments.GetProperty("get")).ShouldContain("pageSize");
+        TagOf(groupRepayment.GetProperty("put")).ShouldBe("Groups");
+        TagOf(groupRepayment.GetProperty("delete")).ShouldBe("Groups");
+        TagOf(restoreRepayment.GetProperty("post")).ShouldBe("Groups");
+        TagOf(repaymentHistory.GetProperty("get")).ShouldBe("Groups");
+        ParameterNames(repaymentHistory.GetProperty("get")).ShouldContain("pageSize");
     }
 
     [Fact]
