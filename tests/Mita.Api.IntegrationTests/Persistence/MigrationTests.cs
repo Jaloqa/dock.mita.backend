@@ -179,6 +179,75 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
     }
 
     [Fact]
+    public async Task Should_DeriveStandardKeys_When_CategoriesExistedBeforeMigration()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = postgres.NewDatabaseConnectionString();
+        await using var context = NewContext(connectionString);
+        await context.GetService<IMigrator>().MigrateAsync("GroupShareLinks", cancellationToken: ct);
+        var userId = Guid.NewGuid();
+        var createdAt = DateTimeOffset.UtcNow;
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(ct);
+        await InsertUserWithSettings(connection, userId, "Pl", ct);
+        await InsertCategory(connection, userId, "Spożywcze", "Expense", null, 0, createdAt, ct);
+        await InsertCategory(connection, userId, "transport", "Expense", null, 1, createdAt, ct);
+        await InsertCategory(connection, userId, "Food", "Expense", null, 2, createdAt, ct);
+        await InsertCategory(connection, userId, "Shopping", "Expense", null, 3, createdAt, ct);
+        await InsertCategory(connection, userId, "Zakupy", "Expense", null, 7, createdAt, ct);
+        await InsertCategory(connection, userId, "Inne", "Expense", "Other", 8, createdAt, ct);
+        await InsertCategory(connection, userId, "Перекази", "Expense", "Transfer", 9, createdAt, ct);
+        await InsertCategory(connection, userId, "Prezent", "Income", null, 10, createdAt, ct);
+        await InsertCategory(connection, userId, "Transport", "Income", null, 11, createdAt, ct);
+        await InsertCategory(connection, userId, "Другое", "Income", "Other", 12, createdAt, ct);
+
+        await context.Database.MigrateAsync(ct);
+
+        (await ReadStandardKeys(connection, userId, ct)).ShouldBe(
+            [
+                "groceries", "transport", null, "shopping", null, "other", "transfer", "gift", null, "other"
+            ]);
+        await using var index = new NpgsqlCommand(
+            "SELECT indexdef FROM pg_indexes WHERE indexname = 'IX_categories_user_kind_standard_key'",
+            connection);
+        var definition = (string?)await index.ExecuteScalarAsync(ct);
+        definition.ShouldNotBeNull();
+        definition.ShouldContain("CREATE UNIQUE INDEX");
+        definition.ShouldContain("(\"UserId\", \"Kind\", \"StandardKey\")");
+        definition.ShouldContain("WHERE (\"StandardKey\" IS NOT NULL)");
+    }
+
+    [Fact]
+    public async Task Should_KeepOneCategoryPerKey_When_SeveralShareStandardName()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = postgres.NewDatabaseConnectionString();
+        await using var context = NewContext(connectionString);
+        await context.GetService<IMigrator>().MigrateAsync("GroupShareLinks", cancellationToken: ct);
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var renamedUserId = Guid.NewGuid();
+        var createdAt = DateTimeOffset.UtcNow;
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(ct);
+        await InsertUserWithSettings(connection, userId, "En", ct);
+        await InsertUserWithSettings(connection, otherUserId, "En", ct);
+        await InsertCategory(connection, userId, "Health", "Expense", null, 4, createdAt.AddMinutes(1), ct);
+        await InsertCategory(connection, userId, "ZDROWIE", "Expense", null, 4, createdAt, ct);
+        await InsertCategory(connection, userId, "Здоровье", "Expense", null, 5, createdAt.AddMinutes(-1), ct);
+        await InsertCategory(connection, otherUserId, "Health", "Expense", null, 9, createdAt, ct);
+        await InsertUserWithSettings(connection, renamedUserId, "En", ct);
+        await InsertCategory(connection, renamedUserId, "Other", "Expense", null, 1, createdAt, ct);
+        await InsertCategory(connection, renamedUserId, "Misc", "Expense", "Other", 5, createdAt, ct);
+
+        await context.Database.MigrateAsync(ct);
+
+        (await ReadStandardKeys(connection, userId, ct)).ShouldBe(["health", null, null]);
+        (await ReadStandardKeys(connection, otherUserId, ct)).ShouldBe(["health"]);
+        (await ReadStandardKeys(connection, renamedUserId, ct)).ShouldBe([null, "other"]);
+    }
+
+    [Fact]
     public async Task Should_RejectSecondUser_When_NormalizedEmailRepeats()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -251,6 +320,56 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
         await using var command = new NpgsqlCommand(InsertUser, connection);
         command.Parameters.AddWithValue("id", Guid.NewGuid());
         await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task InsertCategory(
+        NpgsqlConnection connection,
+        Guid userId,
+        string name,
+        string kind,
+        string? system,
+        int position,
+        DateTimeOffset createdAt,
+        CancellationToken ct)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO categories ("Id", "UserId", "Name", "Kind", "Color", "System", "Position", "CreatedAt",
+                "UpdatedAt")
+            VALUES (@id, @userId, @name, @kind, 'Chart1', @system, @position, @createdAt, @createdAt)
+            """,
+            connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("name", name);
+        command.Parameters.AddWithValue("kind", kind);
+        command.Parameters.AddWithValue("system", (object?)system ?? DBNull.Value);
+        command.Parameters.AddWithValue("position", position);
+        command.Parameters.AddWithValue("createdAt", createdAt);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task<List<string?>> ReadStandardKeys(
+        NpgsqlConnection connection,
+        Guid userId,
+        CancellationToken ct)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT "StandardKey" FROM categories
+            WHERE "UserId" = @userId
+            ORDER BY "Position", "CreatedAt"
+            """,
+            connection);
+        command.Parameters.AddWithValue("userId", userId);
+        var keys = new List<string?>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            keys.Add(reader.IsDBNull(0) ? null : reader.GetString(0));
+        }
+
+        return keys;
     }
 
     private static async Task InsertUserWithSettings(

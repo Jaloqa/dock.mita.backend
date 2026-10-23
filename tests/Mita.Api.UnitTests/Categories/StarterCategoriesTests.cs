@@ -63,4 +63,25 @@ public sealed class StarterCategoriesTests
         category.Kind.ShouldBe(CategoryKind.Income);
         category.Color.ShouldBe(CategoryColor.Chart1);
     }
+
+    [Fact]
+    public void Should_SetStandardKey_When_CategoryIsStarter()
+    {
+        var categories = StarterCategories.For(Guid.NewGuid(), Locale.Pl);
+
+        categories.Select(category => category.StandardKey)
+            .ShouldBe(StarterCategories.All.Select(starter => starter.Key));
+        categories.Count(category => category.StandardKey == "other").ShouldBe(2);
+        Category.Create(Guid.NewGuid(), "Food", CategoryKind.Expense, CategoryColor.Chart1).StandardKey.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Should_KeepStandardKey_When_StarterCategoryIsUpdated()
+    {
+        var category = StarterCategories.For(Guid.NewGuid(), Locale.En)[0];
+
+        category.Update("Supermarket", CategoryKind.Expense, CategoryColor.Chart3);
+
+        category.StandardKey.ShouldBe("groceries");
+    }
 }
