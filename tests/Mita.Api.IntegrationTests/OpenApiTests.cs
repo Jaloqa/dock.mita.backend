@@ -235,6 +235,7 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}", out var groupRepayment).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}/restore", out var restoreRepayment).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}/history", out var repaymentHistory).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/balances", out var balances).ShouldBeTrue();
 
         TagOf(groups.GetProperty("get")).ShouldBe("Groups");
         TagOf(groups.GetProperty("post")).ShouldBe("Groups");
@@ -264,6 +265,8 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(restoreRepayment.GetProperty("post")).ShouldBe("Groups");
         TagOf(repaymentHistory.GetProperty("get")).ShouldBe("Groups");
         ParameterNames(repaymentHistory.GetProperty("get")).ShouldContain("pageSize");
+        TagOf(balances.GetProperty("get")).ShouldBe("Groups");
+        ParameterNames(balances.GetProperty("get")).ShouldContain("currency");
     }
 
     [Fact]

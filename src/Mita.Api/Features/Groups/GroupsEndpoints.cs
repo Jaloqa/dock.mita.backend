@@ -9,6 +9,7 @@ using Mita.Api.Features.Groups.DeleteGroup;
 using Mita.Api.Features.Groups.DeleteGroupRepayment;
 using Mita.Api.Features.Groups.ExpenseHistory;
 using Mita.Api.Features.Groups.GetGroup;
+using Mita.Api.Features.Groups.GetGroupBalances;
 using Mita.Api.Features.Groups.GroupRepaymentHistory;
 using Mita.Api.Features.Groups.ListExpenses;
 using Mita.Api.Features.Groups.ListGroupRepayments;
@@ -49,7 +50,8 @@ public static class GroupsEndpoints
             .MapUpdateGroupRepayment()
             .MapDeleteGroupRepayment()
             .MapRestoreGroupRepayment()
-            .MapGroupRepaymentHistory();
+            .MapGroupRepaymentHistory()
+            .MapGetGroupBalances();
 
         return app;
     }
