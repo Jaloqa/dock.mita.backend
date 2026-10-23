@@ -16,6 +16,6 @@ public sealed class GetGroupHandler(AppDbContext db, GroupAccess access)
             return Error.NotFound();
         }
 
-        return await db.LoadAsync(context.GroupId, cancellationToken);
+        return await db.LoadAsync(context.GroupId, includeShareToken: true, cancellationToken);
     }
 }

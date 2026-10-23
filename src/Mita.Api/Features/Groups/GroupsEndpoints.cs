@@ -18,6 +18,8 @@ using Mita.Api.Features.Groups.RemoveMember;
 using Mita.Api.Features.Groups.RenameMember;
 using Mita.Api.Features.Groups.RestoreExpense;
 using Mita.Api.Features.Groups.RestoreGroupRepayment;
+using Mita.Api.Features.Groups.ShareGroup;
+using Mita.Api.Features.Groups.UnshareGroup;
 using Mita.Api.Features.Groups.UpdateExpense;
 using Mita.Api.Features.Groups.UpdateGroup;
 using Mita.Api.Features.Groups.UpdateGroupRepayment;
@@ -35,6 +37,8 @@ public static class GroupsEndpoints
             .MapGetGroup()
             .MapUpdateGroup()
             .MapDeleteGroup()
+            .MapShareGroup()
+            .MapUnshareGroup()
             .MapAddMember()
             .MapRenameMember()
             .MapRemoveMember()

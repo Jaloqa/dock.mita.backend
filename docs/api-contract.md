@@ -58,6 +58,8 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | GET | `/v1/groups/{id}` | required | none | 200 `Group` | 401, 404 |
 | PUT | `/v1/groups/{id}` | required | `GroupUpdateInput` | 200 `Group` | 400, 401, 403, 404 |
 | DELETE | `/v1/groups/{id}` | required | none | 204 | 401, 403, 404 |
+| POST | `/v1/groups/{id}/share` | required | none | 200 `Group` | 401, 403, 404 |
+| DELETE | `/v1/groups/{id}/share` | required | none | 204 | 401, 403, 404 |
 | POST | `/v1/groups/{id}/members` | required | `GroupNameInput` | 201 `GroupMember`, no `Location` header | 400, 401, 403, 404 |
 | PUT | `/v1/groups/{id}/members/{memberId}` | required | `GroupNameInput` | 200 `GroupMember` | 400, 401, 403, 404 |
 | DELETE | `/v1/groups/{id}/members/{memberId}` | required | none | 204 | 400, 401, 403, 404 |
@@ -405,6 +407,7 @@ type Group = {
   total: number;          // minor units of the main currency: the sum of groupAmount over the live expenses
   members: GroupMember[]; // in member order, at most 50
   categories: GroupCategory[]; // the 9 standard categories in this order (groceries, transport, housing, cafes, health, shopping, leisure, gifts, other), then the group's own in creation order, at most 100 of them
+  shareToken: string | null; // the token of the share link while the link is on (43 characters of A-Z, a-z, 0-9, - and _), null while it is off
 };
 
 type GroupMember = {

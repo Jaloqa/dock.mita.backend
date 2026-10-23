@@ -224,6 +224,7 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         var paths = document.RootElement.GetProperty("paths");
         paths.TryGetProperty("/v1/groups", out var groups).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}", out var group).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/share", out var share).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/members", out var members).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/members/{memberId}", out var member).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/categories", out var categories).ShouldBeTrue();
@@ -243,6 +244,8 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         TagOf(group.GetProperty("put")).ShouldBe("Groups");
         TagOf(group.GetProperty("delete")).ShouldBe("Groups");
         ParameterNames(groups.GetProperty("get")).ShouldContain("pageSize");
+        TagOf(share.GetProperty("post")).ShouldBe("Groups");
+        TagOf(share.GetProperty("delete")).ShouldBe("Groups");
         TagOf(members.GetProperty("post")).ShouldBe("Groups");
         TagOf(member.GetProperty("put")).ShouldBe("Groups");
         TagOf(member.GetProperty("delete")).ShouldBe("Groups");
