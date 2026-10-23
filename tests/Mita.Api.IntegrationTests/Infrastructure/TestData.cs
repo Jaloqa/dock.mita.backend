@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Mita.Api.Common.Groups;
 using Mita.Domain.Accounts;
 using Mita.Domain.Budgets;
 using Mita.Domain.Categories;
@@ -307,21 +308,7 @@ public static class TestData
                 GroupSplitMode.Equal,
                 shares));
         var state = JsonSerializer.Serialize(
-            new
-            {
-                expense.PayerId,
-                expense.Amount,
-                Currency = expense.Currency.ToString(),
-                expense.Date,
-                CategoryId = expense.StandardCategory,
-                expense.Tags,
-                expense.Description,
-                Rate = 1,
-                expense.RateManual,
-                expense.GroupAmount,
-                Split = "equal",
-                Shares = shares
-            },
+            GroupExpenseState.From(expense, await MemberOrderAsync(factory, group.Id)),
             WireJson);
 
         await AddEntryAsync(
@@ -425,6 +412,17 @@ public static class TestData
         }
 
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static async Task<Guid[]> MemberOrderAsync(WebApplicationFactory<Program> factory, Guid groupId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.GroupMembers.AsNoTracking()
+            .Where(member => member.GroupId == groupId)
+            .OrderBy(member => member.Position)
+            .Select(member => member.Id)
+            .ToArrayAsync(TestContext.Current.CancellationToken);
     }
 
     private static DateOnly ParseDate(string date) =>
