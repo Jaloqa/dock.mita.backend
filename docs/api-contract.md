@@ -1,4 +1,4 @@
-# API contract: authentication, users, settings, accounts, transfers, rates, categories, transactions, tags, budgets, goals, overview and reports
+# API contract: authentication, users, settings, accounts, transfers, rates, categories, transactions, tags, budgets, goals, debts, overview and reports
 
 This document describes the HTTP contract of API version 1 for the frontend switch-over from mocks to the real backend. The OpenAPI document is served at `/openapi/v1.json`, and Scalar at `/scalar` in the Development environment.
 
@@ -46,6 +46,13 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | PUT | `/v1/goals/{id}` | required | `GoalInput` | 200 `Goal` | 400, 401, 403, 404, 503 |
 | DELETE | `/v1/goals/{id}` | required | none | 204 | 401, 403, 404 |
 | POST | `/v1/goals/{id}/contributions` | required | `GoalContributionInput` | 200 `Goal`, no `Location` header | 400, 401, 403, 404, 409, 503 |
+| GET | `/v1/debts?status&page&pageSize` | required | none | 200 `DebtPage` | 400, 401, 503 |
+| POST | `/v1/debts` | required | `DebtInput` | 201 `Debt`, `Location` header | 400, 401, 403, 503 |
+| PUT | `/v1/debts/{id}` | required | `DebtInput` | 200 `Debt` | 400, 401, 403, 404, 503 |
+| DELETE | `/v1/debts/{id}` | required | none | 204 | 401, 403, 404 |
+| GET | `/v1/debts/{id}/repayments?page&pageSize` | required | none | 200 `Page<DebtRepayment>` | 400, 401, 404 |
+| POST | `/v1/debts/{id}/repayments` | required | `DebtRepaymentInput` | 200 `Debt`, no `Location` header | 400, 401, 403, 404, 503 |
+| DELETE | `/v1/debts/{id}/repayments/{repaymentId}` | required | none | 204 | 401, 403, 404 |
 | GET | `/v1/overview?period` | required | none | 200 `Overview` | 400, 401, 503 |
 | GET | `/v1/reports?range` | required | none | 200 `Report` | 400, 401 |
 
@@ -108,10 +115,10 @@ type Account = {
   type: 'card' | 'cash' | 'savings';
   currency: Currency;
   openingBalance: number; // minor units of the account currency
-  balance: number;        // minor units, computed by the server: openingBalance plus every transfer leg plus every transaction (income adds, expense subtracts, in the account currency)
+  balance: number;        // minor units, computed by the server: openingBalance plus every transfer leg plus every transaction (income adds, expense subtracts, in the account currency) plus every debt leg (a lent debt subtracts, a borrowed one adds) plus every repayment leg (a repayment of a lent debt adds, of a borrowed debt subtracts)
   cardLast4: string | null;
   archived: boolean;
-  inUse: boolean;         // the account has at least one transfer or transaction
+  inUse: boolean;         // the account has at least one transfer, transaction, debt or repayment
   linkedGoals: number;    // the number of the user's goals linked to this account
 };
 
@@ -292,6 +299,74 @@ type GoalContributionInput = {
   rate?: number;          // manual rate per major unit, 0 < rate <= 1000000000; used only for a linked goal in another currency, but still validated
 };
 
+type DebtDirection = 'lent' | 'borrowed'; // lent: money left the user ("owed to me"); borrowed: money came to the user ("I owe")
+
+type DebtStatus = 'open' | 'settled';
+
+type Debt = {
+  id: string;             // GUID
+  direction: DebtDirection;
+  counterparty: string;   // 1 to 40 characters, stored trimmed
+  amount: number;         // minor units of `currency`
+  currency: Currency;     // the debt currency
+  repaid: number;         // minor units of `currency`: the sum of debtAmount over the repayments
+  remaining: number;      // amount - repaid
+  status: DebtStatus;     // 'open' while remaining > 0, 'settled' at 0
+  overdue: boolean;       // open, with a dueDate before today (UTC)
+  date: string;           // YYYY-MM-DD
+  dueDate: string | null; // YYYY-MM-DD
+  accountId: string | null;     // the account the money moved through
+  accountAmount: number | null; // minor units of the account currency, null without an account
+  rate: number | null;    // debt currency to account currency per major unit, 1 for the same currency, null without an account
+  note: string | null;
+  repayments: number;     // the number of repayments
+};
+
+type DebtInput = {
+  direction: DebtDirection;
+  counterparty: string;   // 1 to 40 characters after trimming, no control characters
+  amount: number;         // integer minor units of `currency`, 1 to 100000000000
+  currency: Currency;     // any supported currency, converted into the account currency when an account is given
+  date: string;           // YYYY-MM-DD, at most one year after today (UTC)
+  dueDate?: string | null; // YYYY-MM-DD, not before `date`
+  accountId?: string | null; // a non-archived account of the user; omitted or null moves no money
+  rate?: number;          // manual rate per major unit, 0 < rate <= 1000000000; used only with an account in another currency, but always validated
+  note?: string | null;   // up to 200 characters after trimming
+};
+
+type DebtSummary = {
+  owedToMe: number;       // minor units of the base currency: the remaining amount of every open lent debt
+  owedByMe: number;       // minor units of the base currency: the remaining amount of every open borrowed debt
+  open: number;           // the number of open debts
+  overdue: number;        // the number of overdue debts
+};
+
+type DebtPage = Page<Debt> & {
+  currency: Currency;     // the current base currency
+  summary: DebtSummary;   // over every open debt of the user, whatever the status filter and the page
+};
+
+type DebtRepayment = {
+  id: string;             // GUID
+  date: string;           // YYYY-MM-DD
+  amount: number;         // minor units of `currency`
+  currency: Currency;     // the repayment currency
+  rate: number;           // repayment currency to debt currency per major unit, 1 for the same currency
+  debtAmount: number;     // minor units of the debt currency: what the repayment takes off the debt
+  accountId: string | null;     // the account that received (lent) or paid (borrowed) the money
+  accountAmount: number | null; // minor units of the account currency, null without an account
+  note: string | null;
+};
+
+type DebtRepaymentInput = {
+  date: string;           // YYYY-MM-DD, at most one year after today (UTC)
+  amount: number;         // integer minor units of `currency`, 1 to 100000000000
+  currency: Currency;     // any supported currency, converted into the debt currency
+  rate?: number;          // manual rate per major unit, 0 < rate <= 1000000000; used only in another currency than the debt, but always validated
+  accountId?: string | null; // a non-archived account of the user; omitted or null moves no money
+  note?: string | null;   // up to 200 characters after trimming
+};
+
 type Overview = {
   range: 'week' | 'month' | 'year';
   from: string;           // YYYY-MM-DD, first day of the range
@@ -303,6 +378,7 @@ type Overview = {
     amount: number;       // minor units: every account except archived accounts at 0, converted into the base currency at today's rate
     accounts: number;     // the number of those accounts
   };
+  debts: DebtSummary;     // every amount in the base currency, converted at today's rate
   income: OverviewTotal;
   expense: OverviewTotal;
   averageExpense: number | null; // round(expense.amount / expense.count), null without expense transactions
@@ -489,29 +565,29 @@ Every error is an RFC 9457 `application/problem+json` document:
 
 | Code | Meaning |
 | --- | --- |
-| `validation.required` | the field is missing, null or blank, including the `name` of `PUT /v1/tags/{id}`. Goal `deadline` and `accountId` and contribution `rate` are optional, and `fromAccountId` is required only for a linked goal. `GET /v1/rates` needs at least one of `from` and `to`: when both are missing, `to` is reported (field `to`) |
+| `validation.required` | the field is missing, null or blank, including the `name` of `PUT /v1/tags/{id}`. Goal `deadline` and `accountId` and contribution `rate` are optional, and `fromAccountId` is required only for a linked goal. A debt needs `direction`, `counterparty`, `amount`, `currency` and `date`, and a repayment needs `date`, `amount` and `currency`: the other fields of both are optional. `GET /v1/rates` needs at least one of `from` and `to`: when both are missing, `to` is reported (field `to`) |
 | `validation.invalidEmail` | the email is not a valid address. On login it is returned only when the email contains a control character |
 | `validation.emailTaken` | register, or `PUT /v1/me`: another account uses this email |
-| `validation.nameTooLong` | the name is longer than 40 characters after trimming (users, accounts, categories and goals) |
+| `validation.nameTooLong` | the name is longer than 40 characters after trimming (users, accounts, categories and goals), or the debt `counterparty` is |
 | `validation.passwordTooShort` | register: fewer than 10 characters |
 | `validation.passwordTooLong` | register: more than 128 characters |
 | `validation.invalidPassword` | `DELETE /v1/me`: the password is wrong, or the account is locked after repeated failures (field `password`) |
-| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency (anything but exactly three upper-case letters naming one of the 148 supported codes, so `jpy`, ` JPY` and `XDR` are refused), a `baseCurrency` other than PLN, EUR, USD or UAH, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value (minor units of its own currency), a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 minor units of the target account currency (reported under `rate`, also when the product is too large to represent). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers, and for `tags` a value that is not an array, an element that is not a string, and an element that is blank or contains a control character (checked before `tagTooLong` and `tooManyTags`). On tags it covers a `name` that is not a string or contains a control character. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `tagIds`, `date`, `from`, `to`, `kind`, `sort`, budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive) or report `range` (anything but `3m`, `6m` or `12m`) |
-| `validation.currencyLocked` | `PUT /v1/accounts/{id}`: the currency of an account that is in use cannot change (field `currency`) |
+| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency (anything but exactly three upper-case letters naming one of the 148 supported codes, so `jpy`, ` JPY` and `XDR` are refused), a `baseCurrency` other than PLN, EUR, USD or UAH, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value (minor units of its own currency), a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 minor units of the target account currency (reported under `rate`, also when the product is too large to represent). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers, and for `tags` a value that is not an array, an element that is not a string, and an element that is blank or contains a control character (checked before `tagTooLong` and `tooManyTags`). On tags it covers a `name` that is not a string or contains a control character. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. On debts it covers an unknown `direction` or `currency`, a `counterparty` or `note` that is not a string or contains a control character, a `dueDate` that is not a real `YYYY-MM-DD`, and the same rules for `amount`, `date`, `rate` and the converted `accountAmount` as on transactions. On repayments it covers an unknown `currency`, a `note` that is not a string or contains a control character, and the same rules for `amount`, `date`, `rate` and the converted `debtAmount` and `accountAmount` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `tagIds`, `date`, `from`, `to`, `kind`, `sort`, debt `status` (anything but `open` or `settled`, case-sensitive), budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive) or report `range` (anything but `3m`, `6m` or `12m`) |
+| `validation.currencyLocked` | `PUT /v1/accounts/{id}`: the currency of an account that is in use (it has a transfer, a transaction, a debt or a repayment) cannot change (field `currency`) |
 | `validation.cardLast4` | `cardLast4` is present, not blank and not exactly 4 digits. Checked for every account type |
-| `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers or transactions, so it can only be archived (field `id`) |
-| `validation.dateTooFar` | transfer, transaction or goal contribution `date` is later than today plus one year |
-| `validation.unknownAccount` | transfer `fromAccountId` or `toAccountId`, transaction `accountId`, goal `accountId` or contribution `fromAccountId` is not one of the user's accounts (or not a GUID) |
-| `validation.archivedAccount` | transfer `fromAccountId` or `toAccountId`, transaction `accountId`, goal `accountId` or contribution `fromAccountId` is an archived account. A contribution to a goal whose linked account is archived answers it under `accountId`. On `PUT /v1/transactions/{id}` the account the transaction already has is allowed even when archived, and `PUT /v1/goals/{id}` may keep the account the goal is already linked to |
+| `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers, transactions, debts or repayments, so it can only be archived (field `id`) |
+| `validation.dateTooFar` | transfer, transaction, goal contribution, debt or repayment `date` is later than today plus one year |
+| `validation.unknownAccount` | transfer `fromAccountId` or `toAccountId`, transaction `accountId`, goal `accountId`, contribution `fromAccountId`, debt `accountId` or repayment `accountId` is not one of the user's accounts (or not a GUID) |
+| `validation.archivedAccount` | transfer `fromAccountId` or `toAccountId`, transaction `accountId`, goal `accountId`, contribution `fromAccountId`, debt `accountId` or repayment `accountId` is an archived account. A contribution to a goal whose linked account is archived answers it under `accountId`. On `PUT /v1/transactions/{id}` the account the transaction already has is allowed even when archived, `PUT /v1/goals/{id}` may keep the account the goal is already linked to, and `PUT /v1/debts/{id}` may keep the account the debt already has |
 | `validation.sameAccount` | transfer `toAccountId` equals `fromAccountId`, or a contribution `fromAccountId` equals the account the goal is linked to |
-| `validation.positiveAmount` | transfer `fromAmount`, transaction `amount`, budget `limit`, goal `target` or contribution `amount` is 0 or negative, or the converted amount rounds to 0 (reported under `rate`) |
+| `validation.positiveAmount` | transfer `fromAmount`, transaction `amount`, budget `limit`, goal `target`, contribution `amount`, debt `amount` or repayment `amount` is 0 or negative, or the converted amount rounds to 0 (reported under `rate`: the `accountAmount` of a debt, the `debtAmount` or `accountAmount` of a repayment) |
 | `validation.categoryNameTaken` | `POST`/`PUT /v1/categories`: another category of the same kind has this name, compared case-insensitively after trimming (field `name`) |
 | `validation.categoryKindLocked` | `PUT /v1/categories/{id}`: the kind of a system category, or of a category that is in use, cannot change (field `kind`) |
 | `validation.systemCategory` | `DELETE /v1/categories/{id}`: a system category cannot be deleted (field `id`) |
 | `validation.unknownCategory` | transaction or budget `categoryId` is not one of the user's categories, is not a GUID, or is the `transfer` category. Also returned when the category was deleted at the same moment |
 | `validation.categoryKindMismatch` | transaction `categoryId` has a different kind than the transaction `kind`. Checked only when `kind` itself is valid |
 | `validation.titleTooLong` | transaction `title` is longer than 100 characters after trimming |
-| `validation.noteTooLong` | transaction `note` is longer than 200 characters after trimming (transfers report this as `validation.invalidValue`) |
+| `validation.noteTooLong` | transaction, debt or repayment `note` is longer than 200 characters after trimming (transfers report this as `validation.invalidValue`) |
 | `validation.tagTooLong` | a transaction tag, or the `name` of `PUT /v1/tags/{id}`, is longer than 30 characters after trimming (field `tags` or `name`) |
 | `validation.tooManyTags` | transaction `tags` holds more than 10 distinct names, compared case-insensitively (field `tags`) |
 | `validation.tagNameTaken` | `PUT /v1/tags/{id}`: another tag of the user has this name, compared case-insensitively after trimming (field `name`) |
@@ -520,6 +596,10 @@ Every error is an RFC 9457 `application/problem+json` document:
 | `validation.nothingToCopy` | `POST /v1/budgets/copy`: the previous period has no budget to copy, or every category of it already has a budget in the target period (field `period`) |
 | `validation.savingsAccountOnly` | `POST`/`PUT /v1/goals`: `accountId` is not a savings account (field `accountId`). Not checked when `PUT` keeps the account the goal is already linked to |
 | `validation.deadlinePast` | `POST`/`PUT /v1/goals`: `deadline` is before the current month (UTC). Not checked when `PUT` keeps the stored deadline (field `deadline`) |
+| `validation.dueBeforeDate` | `POST`/`PUT /v1/debts`: `dueDate` is before `date`. Checked only when `date` is valid (field `dueDate`) |
+| `validation.exceedsRemaining` | `POST /v1/debts/{id}/repayments`: the repayment, converted into the debt currency (`debtAmount`), is above the remaining amount of the debt. Also returned for a settled debt (field `amount`) |
+| `validation.belowRepaid` | `PUT /v1/debts/{id}`: `amount` is below the amount already repaid (field `amount`) |
+| `validation.debtCurrencyLocked` | `PUT /v1/debts/{id}`: the currency of a debt that has a repayment cannot change (field `currency`) |
 
 ### Other error codes
 
@@ -535,7 +615,7 @@ Every error is an RFC 9457 `application/problem+json` document:
 | 409 | `goal.concurrentUpdate` | `POST /v1/goals/{id}/contributions` | the goal was linked to another account (or unlinked) by another request while the contribution was processed. Nothing is written. Reload the goal and retry |
 | 429 | title "Too many requests" | `/v1/auth/*` and `DELETE /v1/me` | rate limit exceeded. The `Retry-After` header holds the wait in seconds. On refresh it does not mean the session ended: wait and retry |
 | 500 | title "Server error" | any | unexpected failure. Report the `correlationId` |
-| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `DELETE /v1/categories/{id}`, `GET /v1/overview` | a conversion that needs an exchange rate that is not stored yet, or whose newest stored rate is older than 30 days (see Rates): a cross-currency transfer, transaction or contribution without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions and contributions can also send a manual `rate` (only for the entered-to-account conversion, never for the account-to-base one). A stale rate is refused only on the automatic conversions of transfers, transactions and contributions. The base currency change and every read value stored data with the latest stored rate whatever its age. On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500. On `GET /v1/overview` it is returned when the balance, a budget or a goal needs a rate that is not stored |
+| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `GET /v1/debts`, `POST /v1/debts`, `PUT /v1/debts/{id}`, `POST /v1/debts/{id}/repayments`, `DELETE /v1/categories/{id}`, `GET /v1/overview` | a conversion that needs an exchange rate that is not stored yet, or whose newest stored rate is older than 30 days (see Rates): a cross-currency transfer, transaction, contribution, debt with an account or repayment without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies, a repayment into or out of an account in a third currency the rate between the repayment and account currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions, contributions, debts and repayments can also send a manual `rate` (only for the entered-to-account conversion of a transaction, a contribution or a debt and for the repayment-to-debt conversion of a repayment, never for the account-to-base one or for a repayment's account in a third currency). A stale rate is refused only on the automatic conversions of transfers, transactions, contributions, debts and repayments. The base currency change and every read value stored data with the latest stored rate whatever its age. On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500. On `GET /v1/overview` it is returned when the balance, a budget, a goal or an open debt needs a rate that is not stored. On `GET /v1/debts` it is returned when an open debt needs a rate that was never stored, whatever the `status` filter, because every page carries the summary (see Debts) |
 
 ### Rate limiting and lockout
 
@@ -569,14 +649,14 @@ Currencies and conversion:
 - A rate is always per major unit, as NBP publishes it: 1 JPY = 0.024764 PLN is the rate `0.024764`. Minor units are converted with `round(minor * rate * 10^(exponent(to) - exponent(from)))`, where the exponent is the number of fraction digits above and `round` is half away from zero to a whole minor unit of the target currency. So 1500 JPY at 0.024764 into PLN is 3715 grosze (37.15 PLN), and 1250 KWD minor units (1.250 KWD) at 12.6221 into PLN are 1578 grosze.
 - The rate rounding rule: rates are rounded to 6 decimals, half away from zero. A rate below 0.1 keeps one more decimal for every zero after the decimal point (6 significant digits, at most 12 decimals): `0.024764` stays, `0.00000212` stays and `1.2345678` becomes `1.234568`. The rule applies to stored NBP values, to cross rates and to manual rates, so a tiny rate such as IRR or VND against PLN never collapses to 0.
 - A manual `rate` is a JSON number with `0 < rate <= 1000000000` (KWD to IRR is about 6000000). It is rounded by the rule above before it is used and stored.
-- The amount a write produces in the target currency (`toAmount` of a transfer or contribution, `accountAmount` of a transaction) is held to the same limit, in minor units of that currency. A larger product, or one too large to represent at all, answers `rate: ["validation.invalidValue"]` and never a 500.
+- The amount a write produces in the target currency (`toAmount` of a transfer or contribution, `accountAmount` of a transaction or a debt, `debtAmount` and `accountAmount` of a repayment) is held to the same limit, in minor units of that currency. A larger product, or one too large to represent at all, answers `rate: ["validation.invalidValue"]` and never a 500.
 
 ### Accounts
 
 - `GET /v1/accounts`: `pageSize` defaults to 100 (maximum 100). Accounts are ordered by creation time.
-- `balance` is `openingBalance` plus the sum of the account's transfer legs and transactions (`+accountAmount` for income, `-accountAmount` for expense), computed by the server. `inUse` is true when the account has any transfer or transaction. `linkedGoals` is the number of the user's goals linked to the account. Deleting an account that has no history but is linked to goals answers 204 and unlinks them (`accountId: null`).
+- `balance` is `openingBalance` plus the sum of the account's transfer legs, transactions (`+accountAmount` for income, `-accountAmount` for expense), debt legs (`-accountAmount` for a lent debt, `+accountAmount` for a borrowed one) and repayment legs (`+accountAmount` for a repayment of a lent debt, `-accountAmount` for a repayment of a borrowed one), computed by the server. `inUse` is true when the account has any transfer, transaction, debt or repayment. `linkedGoals` is the number of the user's goals linked to the account. Deleting an account that has no history but is linked to goals answers 204 and unlinks them (`accountId: null`).
 - `DELETE` removes an account that has no history. An account in use answers 400 `id: ["validation.accountInUse"]`: archive it with `PUT` and `archived: true` instead. Deleting a missing id answers 404.
-- `PUT` replaces the editable fields. The currency of an account in use (with a transfer or a transaction) cannot change (`validation.currencyLocked`).
+- `PUT` replaces the editable fields. The currency of an account in use (with a transfer, a transaction, a debt or a repayment) cannot change (`validation.currencyLocked`).
 - `cardLast4` is validated for every type but stored only for `card`; other types answer `null`.
 
 ### Transfers
@@ -595,8 +675,8 @@ Currencies and conversion:
 - `GET /v1/rates` returns a plain array, not a `Page`. This is the one exception to "every collection is paginated": there are at most 147 pairs.
 - `date`, `from` and `to` are optional, except that at least one of `from` and `to` is required: without both the answer is 400 `to: ["validation.required"]`. An omitted `date` means today's UTC date, and every `Rate` echoes the requested or resolved date in `date`. With only `from` the array holds that currency against every other one, with only `to` every other currency against it, and with both at most one pair. A pair with `from == to` is never returned.
 - For a date, the rate of each currency is the latest stored one on or before that date. For weekends, holidays and future dates that is the latest earlier rate, and for a date before the history start it is the earliest stored rate of that currency. Table B is weekly, so on any day of the week a table B currency reads the rate of its latest publication on or before that day. Cross rates go through PLN and are rounded by the rate rounding rule.
-- A rate older than 30 days counts as missing when it is used by `GET /v1/rates` and by the automatic conversions of writes (transfers, transactions and goal contributions without a manual rate, and every account-to-base conversion). The age is measured against `min(date, today)`: a rate dated more than 30 days before that day is stale, and one dated exactly 30 days before is not. The earliest-rate fallback for a date before the history start is never stale. A currency that NBP stopped publishing therefore leaves `GET /v1/rates` and answers 503 `rates.unavailable` on automatic conversions once its last rate is older than 30 days, while a manual `rate` still works for the entered-to-account step.
-- The staleness rule never applies to reads that value stored data: the overview balance, budgets, goals, the base currency change, copying budgets and moving budgets when a category is deleted use the latest stored rate whatever its age, so a delisted currency never breaks a read.
+- A rate older than 30 days counts as missing when it is used by `GET /v1/rates` and by the automatic conversions of writes (transfers, transactions, goal contributions, debts with an account and repayments without a manual rate, the conversion of a repayment into an account in a third currency, and every account-to-base conversion). The age is measured against `min(date, today)`: a rate dated more than 30 days before that day is stale, and one dated exactly 30 days before is not. The earliest-rate fallback for a date before the history start is never stale. A currency that NBP stopped publishing therefore leaves `GET /v1/rates` and answers 503 `rates.unavailable` on automatic conversions once its last rate is older than 30 days, while a manual `rate` still works for the entered-to-account step.
+- The staleness rule never applies to reads that value stored data: the overview balance, budgets, goals, the debt summary (`summary` of `GET /v1/debts` and `Overview.debts`), the base currency change, copying budgets and moving budgets when a category is deleted use the latest stored rate whatever its age, so a delisted currency never breaks a read.
 - Pairs where a currency has no usable rate (not stored, or stale) are omitted, so the array can be empty right after the first start.
 - Today's rates are cached for up to an hour, are the same for every user, and the sync invalidates them; any other date is read from the database on every request.
 
@@ -692,13 +772,56 @@ Every budget and goal belongs to the current user, and an id of another user ans
 - `saved` grows by the amount received by the linked account, valued in the base currency at the rate of `date`.
 - If the goal is linked to another account or unlinked by another request while the contribution runs, nothing is written and the answer is 409 `goal.concurrentUpdate`.
 
+## Debts
+
+A debt is money the user lent to or borrowed from a person. Debts are private: every debt and repayment belongs to the current user, and an id of another user, for a debt or a repayment, answers exactly like an unknown id (404). An account of another user is `validation.unknownAccount`, and lists and the summary never include the rows of another user. The validation rules above apply: the first failing rule per field, all failing fields in one 400, a whitespace-only string counts as missing, and validation runs before the lookup, so an invalid body sent to an unknown debt id answers 400 and only a valid body gives 404. Ids in paths must be GUIDs, any other value answers 404. Debts are never cached, and "today" is the UTC date of the server.
+
+### Debt records
+
+- `direction` is `lent` (money left the user, shown as "owed to me") or `borrowed` (money came to the user, shown as "I owe"). `counterparty` is free text of 1 to 40 characters after trimming with no control characters, stored trimmed. It is not a contact: `Max` and `max` are two people, and there are no per-person totals.
+- A debt moves money only when it has an `accountId`. A lent debt adds `-accountAmount` to the balance of the account and a borrowed debt `+accountAmount`, like the legs of a transfer. A repayment of a lent debt adds `+accountAmount` to the account it names and a repayment of a borrowed debt `-accountAmount`. These legs count in `Account.balance` and `inUse`, and in the `validation.currencyLocked` and `validation.accountInUse` checks (see Accounts), and they are not listed by `GET /v1/transfers`: debt movements are listed through the debt endpoints. A repayment leg follows the current `direction` of its debt.
+- `currency` is any of the 148 codes, and the account is optional. With an account, `accountAmount` is `amount` converted into the account currency as a transaction is: `rate` is 1 for the same currency, otherwise the manual `rate` (rounded by the rate rounding rule) when sent, and the exchange rate of the debt `date` when not, under the 30-day staleness limit (503 `rates.unavailable`, nothing is written). A converted `accountAmount` that rounds to 0 answers `rate: ["validation.positiveAmount"]`, and one above 100000000000 minor units of the account currency answers `rate: ["validation.invalidValue"]`. Without an account, `accountId`, `accountAmount` and `rate` are `null`, and a sent `rate` is validated and then ignored.
+- `accountId` must be one of the user's accounts (`unknownAccount`) and not archived (`archivedAccount`). `PUT` may keep the account the debt already has even when it was archived since.
+- A debt stores its `rate` and `accountAmount`, and they never change when exchange rates change later. No amount in the base currency is stored: the base currency only matters for the summary, which is computed at read time. A base currency change therefore rewrites nothing, and `PUT /v1/settings` does not look at the currencies of debts, as it does not look at the currencies of accounts.
+- `dueDate` is optional and must be a real date not before `date` (`dueBeforeDate`, checked only when `date` is valid). A debt is `overdue` when it is open and its `dueDate` is before today (UTC): a debt due today is not overdue yet, and a settled debt never is. Repayment dates are not compared with the debt `date`.
+- `repaid` is the sum of the `debtAmount` of the repayments and `remaining` is `amount - repaid`. `status` is `open` while `remaining` is above 0 and `settled` at 0, computed and never stored.
+- `POST` answers 201 with `Location: /v1/debts/{id}`. There is no `GET /v1/debts/{id}`.
+- `PUT` answers 200 with the debt and replaces every field, so the account amount is re-priced with the rules of `POST`, as `PUT /v1/transactions` does: the manual `rate` when sent, otherwise the exchange rate of `date` for an account in another currency than the debt, which answers 503 when that rate is stale. A client that wants to keep the stored rate sends it back as the manual `rate`.
+  - The currency cannot change once the debt has a repayment (`currency: ["validation.debtCurrencyLocked"]`), and `amount` cannot go below `repaid` (`amount: ["validation.belowRepaid"]`). Sending the same currency is fine. When both apply they are reported together in one 400.
+  - A failure of the account conversion (503 `rates.unavailable`, or a `rate` 400 for a converted amount that rounds to 0 or is too large) answers alone, without `belowRepaid` or `debtCurrencyLocked`: those two are checked only once the conversion succeeded.
+  - `direction` may change even when repayments exist. Every repayment leg then follows the new direction, so the balance of the accounts they touched changes accordingly.
+- `DELETE` answers 204, deletes the debt together with its repayments and so restores every balance their legs had changed. Deleting an unknown or foreign id answers 404.
+
+### Listing and summary
+
+- `GET /v1/debts`: `status` is `open` (default) or `settled`, case-sensitive. Any other value, including an empty one, answers 400 `status: ["validation.invalidValue"]`, as an invalid `page` or `pageSize` does under its parameter name. `pageSize` defaults to 100 (maximum 100), and `total` counts the debts of the chosen status.
+- Open debts are ordered by `dueDate` ascending with the debts that have no due date last, then `date` descending, creation time descending and `id` descending. Settled debts are ordered by `date`, creation time and `id`, all descending. Editing a debt keeps its creation time.
+- `currency` is the current base currency and `summary` is in it. The summary covers every open debt of the user, whatever the `status` filter and the page, so it is the same on every page. It is computed over open debts only: `owedToMe` (lent) and `owedByMe` (borrowed) are the remaining amounts summed per currency, each sum is converted into the base currency at today's latest stored rate whatever its age (a read, so the 30-day limit does not apply) and rounded half away from zero, and the converted sums are added. `open` counts the open debts and `overdue` the overdue ones. A user without open debts gets zeros. The same object is `Overview.debts`.
+- When the currency of an open debt has no stored rate at all, the answer is 503 `rates.unavailable`, as the overview balance does. Because every page carries the summary, this includes `status=settled`. A settled debt needs no rate. After a base currency change this can happen until the rate sync has stored the missing rate.
+
+### Repayments
+
+- `POST /v1/debts/{id}/repayments` answers 200 with the updated `Debt`, not with the repayment, and no `Location` header. An unknown or foreign debt answers 404 once the body validated. `date` must not be later than today plus one year (`dateTooFar`).
+- A repayment may be in any currency. `rate` is the rate from the repayment currency to the debt currency: 1 for the same currency, otherwise the manual `rate` (rounded by the rate rounding rule) when sent, and the exchange rate of the repayment `date` when not, under the 30-day staleness limit (503 `rates.unavailable`). `debtAmount` is `amount` converted with it and rounded half away from zero to a whole minor unit of the debt currency, so 50 EUR at 4.2563 take 212.82 off a PLN debt.
+- The account is optional. It receives (lent debt) or pays (borrowed debt) `accountAmount`, which is `amount` when the account is in the repayment currency, `debtAmount` when it is in the debt currency, and otherwise `amount` converted into the account currency at the exchange rate of the repayment `date`. A manual `rate` never replaces that last conversion, and its stale or missing rate answers 503. Without an account, `accountId` and `accountAmount` are `null`.
+- A `debtAmount` or `accountAmount` that rounds to 0 answers `rate: ["validation.positiveAmount"]`, and one above 100000000000 minor units `rate: ["validation.invalidValue"]`.
+- A repayment cannot take more than the remaining amount: a `debtAmount` above `remaining` answers 400 `amount: ["validation.exceedsRemaining"]` and writes nothing, also for a settled debt. Repaying exactly the remaining amount settles the debt, which then is no longer overdue. An unknown or archived account, a rate failure and a converted amount of 0 or too large are reported before `exceedsRemaining`.
+- A repayment stores its `rate`, `debtAmount` and `accountAmount`, and they never change when exchange rates change later. Repayments are never edited: delete the repayment and add it again.
+- `GET /v1/debts/{id}/repayments` answers a `Page<DebtRepayment>`, newest first (`date`, then creation time, then `id`, all descending). `pageSize` defaults to 100 (maximum 100). An invalid `page` or `pageSize` answers 400 `invalidValue` before the lookup, and an unknown or foreign debt answers 404.
+- `DELETE /v1/debts/{id}/repayments/{repaymentId}` answers 204, removes the repayment, gives its `debtAmount` back to `remaining` (a settled debt becomes open again) and restores the balance of its account. A repayment that does not exist, belongs to another debt or to another user, and an unknown or foreign debt, all answer 404.
+
+### Debts in reports and totals
+
+- `Overview.balance` counts what lies on the accounts, including the legs of debts and repayments, but not the amounts still owed. A client that shows the balance with debts computes `balance.amount + debts.owedToMe - debts.owedByMe`.
+- Debts, repayments and their account legs are not transactions. Reports, budgets, `Overview.income`, `Overview.expense`, `transactionCount`, `spending`, `recent` and `hasTransactions` never see them, so lending, borrowing or repaying never shows up as income or expense. They change only `Account.balance` (and so `Overview.balance`), `inUse` of the account and `Overview.debts`.
+
 ## Overview and reports
 
-`GET /v1/overview` and `GET /v1/reports` are read-only and scoped to the current user. Every amount is in minor units of the current base currency, "today" is the UTC date of the server, and the financial periods follow `monthStartDay` (see Financial periods). Changing the base currency re-prices every figure. Neither answer is cached, because the figures depend on today, the rates and every write to accounts, transfers, categories, transactions, budgets, goals and settings. Neither is paginated: the embedded lists are capped by the contract (5 slices plus the bucket, 5 budgets, 6 transactions, 3 goals, at most 12 report periods), and the report structure lists every expense category with spending because the chart needs all of them.
+`GET /v1/overview` and `GET /v1/reports` are read-only and scoped to the current user. Every amount is in minor units of the current base currency, "today" is the UTC date of the server, and the financial periods follow `monthStartDay` (see Financial periods). Changing the base currency re-prices every figure. Neither answer is cached, because the figures depend on today, the rates and every write to accounts, transfers, categories, transactions, budgets, goals, debts and settings. Neither is paginated: the embedded lists are capped by the contract (5 slices plus the bucket, 5 budgets, 6 transactions, 3 goals, at most 12 report periods), and the report structure lists every expense category with spending because the chart needs all of them.
 
 ### Counted transactions
 
-Both endpoints count the transactions of the user dated inside a range (both days inclusive) whose category is not the `transfer` category, by `baseAmount`. Income and expense are summed separately, and `count` is the number of transactions of each kind.
+Both endpoints count the transactions of the user dated inside a range (both days inclusive) whose category is not the `transfer` category, by `baseAmount`. Income and expense are summed separately, and `count` is the number of transactions of each kind. Debts and repayments are not transactions and are never counted (see Debts).
 
 ### Overview
 
@@ -706,14 +829,15 @@ Both endpoints count the transactions of the user dated inside a range (both day
 - Ranges: `week` is the last 7 days ending today (`from` is today minus 6), and the previous range is the 7 days before it. `month` is the financial period of today, and the previous range is the period before it. `year` is the 12 financial periods ending with the period of today, and the previous range is the 12 periods before them.
 - `income.change` and `expense.change` compare the amount with the previous range: `round((current - previous) * 100 / previous)` to one decimal, with halves rounded towards positive infinity, and a drop is negative. They are `null` when the previous amount is 0, and never `-0`. `averageExpense` is `expense.amount / expense.count` rounded half away from zero, `null` without expenses.
 - `spending` is the expense per category inside the range, largest first (ties by name), without the `transfer` category. Only categories with spending above 0 are listed. The five largest become slices. Every other category, and the `other` category whatever its size, join one bucket with `categoryId: null` and `name: null`, appended last when its amount is above 0. `percent` is the share of the total with one decimal, split by the largest remainder so that the percents add up to exactly 100.0. Without expenses the list is empty.
-- `balance.amount` is the sum of the balances of every account except archived accounts whose balance is 0, each converted into the base currency at today's rate (the latest stored one, however old) and rounded half away from zero. An archived account that still holds money counts. `balance.accounts` is the number of counted accounts.
+- `balance.amount` is the sum of the balances of every account except archived accounts whose balance is 0, each converted into the base currency at today's rate (the latest stored one, however old) and rounded half away from zero. An archived account that still holds money counts. The balances include the debt and repayment legs of the accounts, but not the amounts still owed. `balance.accounts` is the number of counted accounts.
+- `debts` is the summary of the user's open debts (`DebtSummary`, see Debts): `owedToMe` and `owedByMe` are the remaining amounts in the base currency at today's latest stored rate, `open` and `overdue` are counts. It does not depend on `period`, and a user without open debts gets zeros.
 - `month` is always the financial period of today, whatever the range: `planned` is the sum of the budget limits, `spent` the sum of the spent amounts, `left` their difference, and `budgets` the number of budgets.
 - `topBudgets` lists the budgets of that period by usage (`spent / limit`) descending, then by `spent` descending, then by creation order, at most 5. `name` is the category name, and the other fields are those of `Budget`.
 - `recent` lists the counted transactions of the range, newest first (`date`, then creation time, then `id`, all descending), at most 6. `amount` is the `baseAmount`.
 - `goals` lists the goals that are not reached first, then the reached ones, each group in creation order, at most 3. `goalCount` counts every goal.
 - `hasTransactions` is true when the user has any transaction on any date, so the client can tell a new user from an empty range.
 - A user with no data gets a complete document with zeros, empty lists and `change: null`.
-- 503 `rates.unavailable`: the balance of an account in another currency, a budget or a goal needs a rate that is not stored, so nothing can be converted. The case cannot happen when every currency in use has a stored rate. The figures are read in one consistent snapshot.
+- 503 `rates.unavailable`: the balance of an account in another currency, a budget, a goal or an open debt needs a rate that is not stored, so nothing can be converted. The case cannot happen when every currency in use has a stored rate. The figures are read in one consistent snapshot.
 
 ### Reports
 
