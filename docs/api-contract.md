@@ -77,10 +77,28 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | POST | `/v1/groups/{id}/repayments/{repaymentId}/restore` | required | none | 200 `GroupRepayment` | 401, 403, 404 |
 | GET | `/v1/groups/{id}/repayments/{repaymentId}/history?page&pageSize` | required | none | 200 `Page<GroupEntryEvent<GroupRepaymentState>>` | 400, 401, 404 |
 | GET | `/v1/groups/{id}/balances?currency` | required | none | 200 `GroupBalances` | 400, 401, 404, 503 |
+| GET | `/v1/shared/groups/{token}` | link | none | 200 `Group`, `shareToken` null | 404, 429 |
+| POST | `/v1/shared/groups/{token}/categories` | link, `X-Group-Member` | `GroupNameInput` | 201 `GroupCategory`, no `Location` header | 400, 403, 404, 429 |
+| GET | `/v1/shared/groups/{token}/expenses?deleted&page&pageSize` | link | none | 200 `Page<GroupExpense>` | 400, 404, 429 |
+| POST | `/v1/shared/groups/{token}/expenses` | link, `X-Group-Member` | `GroupExpenseInput` | 201 `GroupExpense`, no `Location` header | 400, 403, 404, 429, 503 |
+| PUT | `/v1/shared/groups/{token}/expenses/{expenseId}` | link, `X-Group-Member` | `GroupExpenseInput` | 200 `GroupExpense` | 400, 403, 404, 429, 503 |
+| DELETE | `/v1/shared/groups/{token}/expenses/{expenseId}` | link, `X-Group-Member` | none | 204 | 403, 404, 429 |
+| POST | `/v1/shared/groups/{token}/expenses/{expenseId}/restore` | link, `X-Group-Member` | none | 200 `GroupExpense` | 403, 404, 429 |
+| GET | `/v1/shared/groups/{token}/expenses/{expenseId}/history?page&pageSize` | link | none | 200 `Page<GroupEntryEvent<GroupExpenseState>>` | 400, 404, 429 |
+| GET | `/v1/shared/groups/{token}/repayments?deleted&page&pageSize` | link | none | 200 `Page<GroupRepayment>` | 400, 404, 429 |
+| POST | `/v1/shared/groups/{token}/repayments` | link, `X-Group-Member` | `GroupRepaymentInput` | 201 `GroupRepayment`, no `Location` header | 400, 403, 404, 429, 503 |
+| PUT | `/v1/shared/groups/{token}/repayments/{repaymentId}` | link, `X-Group-Member` | `GroupRepaymentInput` | 200 `GroupRepayment` | 400, 403, 404, 429, 503 |
+| DELETE | `/v1/shared/groups/{token}/repayments/{repaymentId}` | link, `X-Group-Member` | none | 204 | 403, 404, 429 |
+| POST | `/v1/shared/groups/{token}/repayments/{repaymentId}/restore` | link, `X-Group-Member` | none | 200 `GroupRepayment` | 403, 404, 429 |
+| GET | `/v1/shared/groups/{token}/repayments/{repaymentId}/history?page&pageSize` | link | none | 200 `Page<GroupEntryEvent<GroupRepaymentState>>` | 400, 404, 429 |
+| GET | `/v1/shared/groups/{token}/balances?currency` | link | none | 200 `GroupBalances` | 400, 404, 429, 503 |
+| GET | `/v1/shared/groups/{token}/rates?date&from&to` | link | none | 200 `Rate[]` | 400, 404, 429 |
 | GET | `/v1/overview?period` | required | none | 200 `Overview` | 400, 401, 503 |
 | GET | `/v1/reports?range` | required | none | 200 `Report` | 400, 401 |
 
 "required" means a valid access token, sent either in the `mita_at` cookie or as an `Authorization: Bearer <token>` header. Cookie authentication is what the browser frontend uses. Requests authenticated with the Bearer header are exempt from the XSRF check.
+
+"link" means no access token: the `{token}` path segment must be the share token of a group whose share link is on, and "`X-Group-Member`" means that the request also names the acting member in that header. See Share link under Expense groups.
 
 Logout always answers 204 and clears the cookies, even when the session is already gone, so the frontend can call it unconditionally.
 
@@ -407,7 +425,7 @@ type Group = {
   total: number;          // minor units of the main currency: the sum of groupAmount over the live expenses
   members: GroupMember[]; // in member order, at most 50
   categories: GroupCategory[]; // the 9 standard categories in this order (groceries, transport, housing, cafes, health, shopping, leisure, gifts, other), then the group's own in creation order, at most 100 of them
-  shareToken: string | null; // the token of the share link while the link is on (43 characters of A-Z, a-z, 0-9, - and _), null while it is off
+  shareToken: string | null; // the token of the share link while the link is on (43 characters of A-Z, a-z, 0-9, - and _), null while it is off; always null on the link routes
 };
 
 type GroupMember = {
@@ -438,8 +456,8 @@ type GroupNameInput = {
 };
 
 type GroupActor = {
-  kind: 'owner' | 'member'; // always 'owner' in this release
-  memberId: string | null;  // null for the owner
+  kind: 'owner' | 'member'; // 'owner' for a change through the owner routes, 'member' for a change through the share link
+  memberId: string | null;  // null for the owner, the member named in X-Group-Member for a member
   name: string;             // the current name of the owner (the user) or of the member
 };
 
@@ -726,6 +744,8 @@ If the header is missing or does not match the cookie, the answer is 403 with co
 
 The `/v1/auth/*` endpoints do not need the header. A new `XSRF-TOKEN` value is issued on every register, login and refresh, so read the cookie again after those calls rather than caching it.
 
+The share link routes (`/v1/shared/groups/{token}`) follow the same rule although they need no access token: an anonymous visitor sends no `mita_at` cookie and needs no header, while a write that carries the `mita_at` cookie (a signed-in visitor) needs it.
+
 ## Refresh flow
 
 The access token lives for 15 minutes. The browser drops the `mita_at` cookie when it expires, so after that the request carries no access token at all and the answer is a plain 401 without a code. For this reason the frontend must not wait for a specific code. On ANY 401 from an endpoint outside `/v1/auth`:
@@ -823,21 +843,25 @@ Every error is an RFC 9457 `application/problem+json` document:
 | 401 | `auth.invalidCredentials` | login | wrong email or password, unknown account, or a locked account. The cases are deliberately indistinguishable |
 | 401 | `auth.sessionExpired` | any protected endpoint, and refresh | the access token expired or was revoked, or the refresh token is missing, invalid or expired. See the refresh flow |
 | 401 | title "Unauthorized", no code | any protected endpoint | no credentials (including an expired `mita_at` cookie the browser dropped), or an invalid token. Treat it like any 401 and try the refresh flow |
-| 403 | `auth.xsrf` | unsafe cookie-authenticated requests | the `X-XSRF-TOKEN` header is missing or does not match the cookie |
+| 403 | `auth.xsrf` | unsafe cookie-authenticated requests, including writes of a signed-in visitor through a share link | the `X-XSRF-TOKEN` header is missing or does not match the cookie |
+| 403 | `group.memberRequired` | writes through a share link: `POST /v1/shared/groups/{token}/categories` and every expense and repayment `POST`, `PUT`, `DELETE` and `restore` under it | the `X-Group-Member` header is missing, is not a GUID or does not name a current member of the group. Nothing is written. Choose the member again and retry |
 | 403 | title "Forbidden", no code | protected endpoints | authenticated but not allowed |
-| 404 | title "Not Found" | any | the resource or route does not exist |
+| 404 | title "Not Found" | any | the resource or route does not exist. On the share link routes also a share token that is unknown, malformed, replaced or turned off, whoever the caller is (never 401 or 403) |
 | 409 | `user.concurrentUpdate` | `PUT /v1/me` | the account was changed by another request at the same time. Reload and retry |
 | 409 | `goal.concurrentUpdate` | `POST /v1/goals/{id}/contributions` | the goal was linked to another account (or unlinked) by another request while the contribution was processed. Nothing is written. Reload the goal and retry |
-| 429 | title "Too many requests" | `/v1/auth/*` and `DELETE /v1/me` | rate limit exceeded. The `Retry-After` header holds the wait in seconds. On refresh it does not mean the session ended: wait and retry |
+| 429 | title "Too many requests" | `/v1/auth/*`, `DELETE /v1/me` and every share link route (`/v1/shared/groups/{token}`) | rate limit exceeded. The `Retry-After` header holds the wait in seconds. On refresh it does not mean the session ended: wait and retry |
 | 500 | title "Server error" | any | unexpected failure. Report the `correlationId` |
 | 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `GET /v1/debts`, `POST /v1/debts`, `PUT /v1/debts/{id}`, `POST /v1/debts/{id}/repayments`, `POST /v1/groups/{id}/expenses`, `PUT /v1/groups/{id}/expenses/{expenseId}`, `POST /v1/groups/{id}/repayments`, `PUT /v1/groups/{id}/repayments/{repaymentId}`, `GET /v1/groups/{id}/balances` with a `currency` other than the main currency of the group, `DELETE /v1/categories/{id}`, `GET /v1/overview` | a conversion that needs an exchange rate that is not stored yet, or whose newest stored rate is older than 30 days (see Rates): a cross-currency transfer, transaction, contribution, debt with an account, repayment, group expense or group repayment without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies, a repayment into or out of an account in a third currency the rate between the repayment and account currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions, contributions, debts, repayments, group expenses and group repayments can also send a manual `rate` (only for the entered-to-account conversion of a transaction, a contribution or a debt, for the repayment-to-debt conversion of a repayment and for the conversion into the main currency of a group entry, never for the account-to-base one or for a repayment's account in a third currency). A stale rate is refused only on the automatic conversions of transfers, transactions, contributions, debts, repayments and group entries. The base currency change and every read value stored data with the latest stored rate whatever its age. On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500. On `GET /v1/overview` it is returned when the balance, a budget, a goal or an open debt needs a rate that is not stored. On `GET /v1/debts` it is returned when an open debt needs a rate that was never stored, whatever the `status` filter, because every page carries the summary (see Debts). On a group expense or group repayment write it is returned when the entry currency differs from the main currency of the group and no stored rate of the entry `date` is usable for the entry currency or the main currency, after the member and category references passed (see Expense groups). On `GET /v1/groups/{id}/balances?currency=X` it is returned when X or the main currency of the group has no stored rate at all, also for a group without entries: a read uses the latest stored rate whatever its age |
 
 ### Rate limiting and lockout
 
-Requests are counted per client IP address per minute, in two separate buckets:
+Requests are counted per client IP address per minute, in three separate buckets:
 
 - `POST /v1/auth/register`, `POST /v1/auth/login` and `DELETE /v1/me` share a tight limit against password guessing (`RateLimiting:AuthPermitLimit`, 10 by default).
 - `POST /v1/auth/refresh` and `POST /v1/auth/logout` have their own, larger limit (`RateLimiting:SessionPermitLimit`, 60 by default), so failed logins never block a refresh.
+- Every share link route under `/v1/shared/groups/{token}`, reads and writes alike, shares the `groupLink` limit against guessing share tokens (`RateLimiting:GroupLinkPermitLimit`, 120 by default). Requests with an unknown, malformed or turned-off token count too.
+
+Requests are counted before authentication and before the share token is looked up. So a `DELETE /v1/me` that fails authentication or the XSRF check also uses up the auth bucket, and a link request over the limit answers 429 without its token being looked up.
 
 A 429 from refresh means "wait for `Retry-After` seconds and retry", never "logged out".
 
@@ -1032,7 +1056,7 @@ A debt is money the user lent to or borrowed from a person. Debts are private: e
 
 ## Expense groups
 
-A group shares spending between named people: members are plain names, not users. Expenses are paid by one member and split between members, repayments move money from one member to another, and the balances say who owes whom. In this release only the user who created a group (its owner) reads or changes it: every group route needs a valid access token, and a group of another user, an unknown group and an entry id that belongs to another group all answer exactly like an unknown id (404). `DELETE /v1/me` deletes the groups of the user with everything in them.
+A group shares spending between named people: members are plain names, not users. Expenses are paid by one member and split between members, repayments move money from one member to another, and the balances say who owes whom. The user who created a group (its owner) reads and changes it through the group routes under `/v1/groups`: each of them needs a valid access token, and a group of another user, an unknown group and an entry id that belongs to another group all answer exactly like an unknown id (404). The owner can also turn on a share link, through which anyone who has the link reads the group and writes its expenses, repayments and categories without an account, but never changes the group itself or its members (see Share link). `DELETE /v1/me` deletes the groups of the user with everything in them.
 
 The validation rules above apply: the first failing rule per field, all failing fields in one 400, a whitespace-only string counts as missing. Ids in paths must be GUIDs, any other value answers 404. Groups are never cached, and "today" is the UTC date of the server. Groups never touch accounts, budgets, reports or the overview: a group entry is not a transaction, moves no money on any account, and `Account.balance`, `inUse`, `Overview` and `Report` never see it. No endpoint creates a transaction or a debt from a group.
 
@@ -1044,6 +1068,8 @@ A group write is checked in this order, and the first stage that fails answers a
 2. The group (404), then the entry for `PUT`, `DELETE` and `restore` (404).
 3. The references (400): the member and category ids that the body names must belong to this group. Every failing reference is reported together in one 400 (`payerId`, `categoryId`, `split`, `fromMemberId`, `toMemberId`), before any rate is looked at.
 4. The rate (503 `rates.unavailable`), then the converted amount (400 under `rate`: `validation.positiveAmount` or `validation.invalidValue`). Nothing is written when any stage fails.
+
+The share link routes add their own stages around these (see Share link).
 
 ### Groups and members
 
@@ -1097,7 +1123,7 @@ A group write is checked in this order, and the first stage that fails answers a
 - `DELETE` of an expense or a repayment is soft and answers 204: the entry leaves the balances and the `total`, is listed with `deleted=true` and keeps every field. `POST .../restore` answers 200 with the entry exactly as it was, and puts it back into the balances. A deleted entry cannot be edited, so edit it after restoring it. Deleting a deleted entry, restoring a live one, and any id that is not an entry of this group answer 404. Entries are removed for good only together with their group.
 - Every create, edit, delete and restore appends one event to the history of the entry: its `action`, the time `at`, the `actor` and the `state` of the entry right after the action (`GroupExpenseState` or `GroupRepaymentState`, the full state and not a difference: the client compares consecutive states). `GET .../history` answers a `Page<GroupEntryEvent<...>>`, newest first (`at`, then `id`, both descending), `pageSize` defaults to 100 (maximum 100). The history of a deleted entry stays readable, and an entry that does not belong to the group answers 404.
 - `createdBy` and `createdAt` come from the first event of the entry. `updatedBy` and `updatedAt` come from the newest event after the first one, whatever its action (an edit, a delete or a restore), and are `null` for an entry that was never changed.
-- A `GroupActor` is `{ kind: 'owner', memberId: null, name }` in this release, with the current name of the owner. `kind: 'member'` (a member's name and id) is reserved for later releases, and clients should show the `name` of either.
+- A `GroupActor` is `{ kind: 'owner', memberId: null, name }` with the current name of the owner for a change made through the owner routes, and `{ kind: 'member', memberId, name }` with the current name of the member for a change made through the share link by the member named in `X-Group-Member` (see Share link). Clients show the `name` of either.
 - There is no optimistic concurrency token. When two edits of one entry arrive at the same moment they are applied one after the other, the later one wins, and the earlier state stays in the history, where it can be applied again by editing the entry with it (the members it names stay in the group: see Groups and members).
 
 ### Balances and suggested transfers
@@ -1112,6 +1138,27 @@ A group write is checked in this order, and the first stage that fails answers a
 - Every list is a `Page<T>`: `page` is 1-based, `pageSize` defaults to 100 and is at most 100 on every group list, and `total` counts the rows of the list (the live or the deleted ones, as the `deleted` flag says). An invalid `page` or `pageSize` answers 400 `invalidValue` under the parameter name, before the lookup.
 - Groups: newest created first (creation time, then `id`, both descending). Expenses and repayments: `date`, then creation time, then `id`, all descending. Editing an entry keeps its creation time, so an edit moves it in the list only when its `date` changes. History: newest event first (`at`, then `id`, both descending).
 - Members are in member order (the order of creation, new members last) in `Group.members`, `GroupExpense.shares`, `GroupBalances.members` and everywhere a list of members is shown, and the categories are in the order of `Group.categories`. A group holds at most 50 members and 109 categories (the 9 standard ones and 100 of its own). Both lists are embedded in `Group`, not paginated, and neither is `GroupBalances`, whose `transfers` are fewer than its members: this is an exception to "every collection is paginated", as for rates.
+
+### Share link
+
+- `POST /v1/groups/{id}/share` turns the share link of a group on and answers 200 with the `Group`, whose `shareToken` is a new token. Called while the link is on, it replaces the token, and the old token stops working at once. `DELETE /v1/groups/{id}/share` turns the link off and answers 204, also when it is already off. Only the owner manages the link: both routes need a valid access token, and an unknown group or a group of another user answers 404.
+- A token is 32 random bytes in base64url without padding: 43 characters of `A-Z`, `a-z`, `0-9`, `-` and `_`. It is stored as it is, so the owner reads it again in `Group.shareToken` on the owner routes for as long as the link is on. `shareToken` is `null` while the link is off, and always `null` on the link routes.
+- The link routes are under `/v1/shared/groups/{token}`: `GET` (the `Group`), `POST /categories`, the six expense routes and the six repayment routes of the owner (list, create, edit, delete, restore and history), `GET /balances` and `GET /rates`. Apart from the token, the member header and the checks below, they take the same queries and bodies, apply the same rules and answer the same statuses and bodies as the matching owner routes, and `GET /rates` as `GET /v1/rates`. Nothing else is reachable through a link: no route changes or deletes the group, manages its members or manages the link, and every other API keeps its own authentication.
+- A link route needs no access token: the token in the path must be well formed and name a group whose link is on. An unknown, malformed, replaced or turned-off token answers 404 "Not Found", exactly like a missing page, and never 401 or 403. This covers the methods and paths listed above: another method on one of these paths answers 405, as on any route. Writes look the token up again when they lock the group, so a link that is turned off or replaced before the write locks the group also answers 404 and nothing is written, while a write that already holds the lock completes and the change of the link waits for it. One token opens exactly one group: an entry id of another group answers 404, and a member or category of another group answers 400 `validation.unknownMember` or `validation.unknownCategory`, as on the owner routes.
+- The identity of the caller is ignored. An anonymous visitor and a signed-in user, the owner included, get the same answers apart from the XSRF check (see below) and never the owner's powers, and the owner writing through the link acts as the member named in `X-Group-Member`.
+- Every write through the link (`POST /categories` and every expense and repayment `POST`, `PUT`, `DELETE` and `restore`) names the member who makes it in the request header `X-Group-Member`, whose value is the `id` of a current member of the group, compared as a GUID in any letter case or layout (for example without hyphens or in braces). A missing header, a value that is not a GUID and a GUID that is not a member of this group (a member of another group included) answer 403 `group.memberRequired`, and nothing is written. Reads ignore the header. It is a choice, not a proof of identity: anyone with the link can act as any member, and every change shows who it claimed to be. The CORS policy allows the header.
+- The member named in `X-Group-Member` is the actor of the change: `createdBy`, `updatedBy` and the history `actor` show `{ kind: 'member', memberId, name }` with the member's current name, while a change through the owner routes shows the owner. A member that has acted is in use (see Groups and members), so it can be renamed but not removed.
+- XSRF works as on every other route (see XSRF protection): an anonymous visitor sends no `mita_at` cookie and needs no `X-XSRF-TOKEN` header, while a write that carries the `mita_at` cookie (a signed-in visitor) needs it and answers 403 `auth.xsrf` without it.
+- Every link route counts against the `groupLink` rate limit before its token is looked up, so requests with unknown tokens count too (see Rate limiting and lockout). Over the limit the answer is 429 with a `Retry-After` header.
+- A link request is checked in this order, and the first stage that fails answers alone:
+  1. The rate limit (429).
+  2. The token (404).
+  3. XSRF (403 `auth.xsrf`), only for a write that carries the `mita_at` cookie.
+  4. The shape of the request (400), as in Order of checks.
+  5. The group, looked up again by its token (404); writes do it under their lock.
+  6. The member (403 `group.memberRequired`), on writes only.
+  7. The entry for `PUT`, `DELETE`, `restore` and history (404).
+  8. The references (400), then the rate (503 `rates.unavailable`), then the converted amount (400 under `rate`).
 
 ## Overview and reports
 
