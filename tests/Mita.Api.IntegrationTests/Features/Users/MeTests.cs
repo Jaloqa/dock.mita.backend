@@ -12,6 +12,7 @@ using Mita.Api.IntegrationTests.Infrastructure;
 using Mita.Domain.Accounts;
 using Mita.Domain.Categories;
 using Mita.Domain.Debts;
+using Mita.Domain.Groups;
 using Mita.Infrastructure.Identity;
 using Mita.Infrastructure.Persistence;
 using Shouldly;
@@ -304,6 +305,56 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
         (await db.Accounts.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
         (await db.Debts.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
         (await db.DebtRepayments.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Should_DeleteUser_When_GroupsExist()
+    {
+        using var client = new AuthClient(factory);
+        var credentials = await client.RegisterNewAsync(Ct);
+        var userId = (await GetMeAsync(client)).GetProperty("id").GetGuid();
+        var (group, members) = await TestData.AddGroupAsync(factory, userId);
+        var expense = await TestData.AddGroupExpenseAsync(factory, group, members[0], 9_000, members);
+        await TestData.AddGroupExpenseAsync(factory, group, members[1], 1_500, members[1..], deleted: true);
+        await TestData.AddGroupRepaymentAsync(factory, group, members[2], members[0], 3_000);
+        await using (var setup = factory.Services.CreateAsyncScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<AppDbContext>();
+            var beach = GroupCategory.Create(group.Id, "Beach");
+            db.GroupCategories.Add(beach);
+            await db.SaveChangesAsync(Ct);
+            (await db.GroupExpenses
+                .Where(row => row.Id == expense.Id)
+                .ExecuteUpdateAsync(
+                    set => set
+                        .SetProperty(row => row.CategoryId, beach.Id)
+                        .SetProperty(row => row.StandardCategory, (string?)null),
+                    Ct)).ShouldBe(1);
+            db.GroupEntryEvents.Add(GroupEntryEvent.Create(
+                group.Id,
+                GroupEntryKind.Expense,
+                expense.Id,
+                GroupEntryAction.Updated,
+                DateTimeOffset.UtcNow,
+                GroupActor.Member(members[1].Id),
+                "{}"));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using (var response = await DeleteAsync(client, new { password = credentials.Password }))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var check = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await check.Groups.AnyAsync(row => row.OwnerId == userId, Ct)).ShouldBeFalse();
+        (await check.GroupMembers.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
+        (await check.GroupCategories.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
+        (await check.GroupExpenses.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
+        (await check.GroupExpenseShares.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
+        (await check.GroupRepayments.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
+        (await check.GroupEntryEvents.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
     }
 
     [Fact]
