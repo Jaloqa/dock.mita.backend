@@ -62,6 +62,19 @@ public sealed class SensitiveDataMaskingEnricher : ILogEventEnricher
                     : new SequenceValue(elements);
             }
 
+            case ScalarValue { Value: string text }:
+            {
+                var redacted = ShareLinkRedaction.Redact(text);
+                return redacted == text ? value : new ScalarValue(redacted);
+            }
+
+            case ScalarValue { Value: Uri uri }:
+            {
+                var text = uri.ToString();
+                var redacted = ShareLinkRedaction.Redact(text);
+                return redacted == text ? value : new ScalarValue(redacted);
+            }
+
             default:
                 return value;
         }

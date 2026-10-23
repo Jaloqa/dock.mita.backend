@@ -31,7 +31,8 @@ public sealed class MitaApiFactory(PostgresFixture postgres, RedisFixture redis)
                 ["Jwt:Audience"] = TestTokens.Audience,
                 ["Jwt:SigningKey"] = TestTokens.SigningKey,
                 ["RateLimiting:AuthPermitLimit"] = "1000",
-                ["RateLimiting:SessionPermitLimit"] = "1000"
+                ["RateLimiting:SessionPermitLimit"] = "1000",
+                ["RateLimiting:GroupLinkPermitLimit"] = "1000"
             }));
     }
 }

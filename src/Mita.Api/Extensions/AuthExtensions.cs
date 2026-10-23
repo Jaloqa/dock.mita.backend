@@ -1,5 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -13,6 +15,7 @@ namespace Mita.Api.Extensions;
 public static class AuthExtensions
 {
     public const string UserPolicy = "User";
+    public const string GroupLinkPolicy = "GroupLink";
 
     public static IServiceCollection AddMitaAuth(this IServiceCollection services)
     {
@@ -28,7 +31,11 @@ public static class AuthExtensions
         services.AddAuthorizationBuilder()
             .AddPolicy(UserPolicy, policy => policy
                 .RequireAuthenticatedUser()
-                .RequireAssertion(context => CurrentUser.TryReadId(context.User, out _)));
+                .RequireAssertion(context => CurrentUser.TryReadId(context.User, out _)))
+            .AddPolicy(GroupLinkPolicy, policy => policy.AddRequirements(new GroupLinkRequirement()));
+        services.AddScoped<IAuthorizationHandler, GroupLinkAuthorizationHandler>();
+        services.AddSingleton<AuthorizationMiddlewareResultHandler>();
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler, GroupLinkAuthorizationResultHandler>();
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();

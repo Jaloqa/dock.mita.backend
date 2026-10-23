@@ -273,6 +273,46 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
     }
 
     [Fact]
+    public async Task Should_DescribeSharedGroups()
+    {
+        const string prefix = "/v1/shared/groups/{token}";
+        string[] suffixes =
+        [
+            "", "/balances", "/expenses", "/expenses/{expenseId}/history", "/repayments",
+            "/repayments/{repaymentId}/history", "/rates"
+        ];
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.EnumerateObject()
+            .Select(path => path.Name)
+            .Where(path => path.StartsWith(prefix, StringComparison.Ordinal))
+            .ShouldBe(suffixes.Select(suffix => prefix + suffix), ignoreOrder: true);
+        foreach (var suffix in suffixes)
+        {
+            var item = paths.GetProperty(prefix + suffix);
+            item.TryGetProperty("post", out _).ShouldBeFalse();
+            item.TryGetProperty("put", out _).ShouldBeFalse();
+            item.TryGetProperty("delete", out _).ShouldBeFalse();
+            var get = item.GetProperty("get");
+            TagOf(get).ShouldBe("Shared groups");
+            get.TryGetProperty("security", out _).ShouldBeFalse();
+            get.GetProperty("parameters").EnumerateArray()
+                .Where(parameter => parameter.GetProperty("in").GetString() == "path")
+                .Select(parameter => parameter.GetProperty("name").GetString())
+                .ShouldContain("token", prefix + suffix);
+        }
+
+        ParameterNames(paths.GetProperty($"{prefix}/expenses").GetProperty("get")).ShouldContain("deleted");
+        ParameterNames(paths.GetProperty($"{prefix}/balances").GetProperty("get")).ShouldContain("currency");
+        ParameterNames(paths.GetProperty($"{prefix}/rates").GetProperty("get")).ShouldContain("to");
+    }
+
+    [Fact]
     public async Task Should_DescribeOverviewAndReports()
     {
         using var client = factory.CreateClient();

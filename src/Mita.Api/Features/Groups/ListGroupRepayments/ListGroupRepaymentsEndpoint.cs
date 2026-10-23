@@ -12,9 +12,20 @@ public static class ListGroupRepaymentsEndpoint
         group.MapGet(
                 "/groups/{id:guid}/repayments",
                 async (Guid id, IMediator mediator, CancellationToken ct, string? deleted = null, int page = 1, int pageSize = 100) =>
-                    (await mediator.Send(new ListGroupRepaymentsQuery(new GroupScope(id), deleted, page, pageSize), ct))
+                    (await mediator.Send(new ListGroupRepaymentsQuery(GroupScope.Owner(id), deleted, page, pageSize), ct))
                         .ToHttp(repayments => Results.Ok(repayments)))
             .RequireAuthorization(AuthExtensions.UserPolicy);
+
+        return group;
+    }
+
+    public static RouteGroupBuilder MapSharedListGroupRepayments(this RouteGroupBuilder group)
+    {
+        group.MapGet(
+            "/repayments",
+            async (string token, IMediator mediator, CancellationToken ct, string? deleted = null, int page = 1, int pageSize = 100) =>
+                (await mediator.Send(new ListGroupRepaymentsQuery(GroupScope.Link(token, null), deleted, page, pageSize), ct))
+                    .ToHttp(repayments => Results.Ok(repayments)));
 
         return group;
     }

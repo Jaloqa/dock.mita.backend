@@ -15,9 +15,11 @@ public static class ApiVersioningExtensions
         return services;
     }
 
-    public static RouteGroupBuilder MapV1(this IEndpointRouteBuilder app) =>
+    public static RouteGroupBuilder MapVersioned(this IEndpointRouteBuilder app) =>
         app.NewVersionedApi()
             .MapGroup("/v{version:apiVersion}")
-            .HasApiVersion(new ApiVersion(1, 0))
-            .RequireAuthorization(AuthExtensions.UserPolicy);
+            .HasApiVersion(new ApiVersion(1, 0));
+
+    public static RouteGroupBuilder MapV1(this IEndpointRouteBuilder app) =>
+        app.MapVersioned().RequireAuthorization(AuthExtensions.UserPolicy);
 }

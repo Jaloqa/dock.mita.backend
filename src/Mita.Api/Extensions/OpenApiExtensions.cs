@@ -27,7 +27,8 @@ public static class OpenApiExtensions
             options.AddOperationTransformer((operation, context, _) =>
             {
                 var metadata = context.Description.ActionDescriptor.EndpointMetadata;
-                if (metadata.OfType<IAuthorizeData>().Any() && !metadata.OfType<IAllowAnonymous>().Any())
+                if (metadata.OfType<IAuthorizeData>().Any(data => data.Policy != AuthExtensions.GroupLinkPolicy)
+                    && !metadata.OfType<IAllowAnonymous>().Any())
                 {
                     operation.Security =
                     [

@@ -14,7 +14,7 @@ public static class CreateExpenseEndpoint
                 async (Guid id, CreateExpenseRequest? request, IMediator mediator, CancellationToken ct) =>
                 {
                     var command = new CreateExpenseCommand(
-                        new GroupScope(id),
+                        GroupScope.Owner(id),
                         request?.PayerId,
                         request?.Amount,
                         request?.Currency,

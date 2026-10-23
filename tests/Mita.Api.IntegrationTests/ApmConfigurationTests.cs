@@ -14,14 +14,14 @@ public sealed class ApmConfigurationTests(MitaApiFactory factory) : IClassFixtur
     ];
 
     [Fact]
-    public void Should_RedactAgentDefaultsAndSessionCookies_When_ApmCapturesHeaders()
+    public void Should_RedactAgentDefaultsSessionCookiesAndReferer_When_ApmCapturesHeaders()
     {
         var configuration = factory.Services.GetRequiredService<IConfiguration>();
 
         var sanitized = configuration["ElasticApm:SanitizeFieldNames"].ShouldNotBeNull()
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        sanitized.ShouldBe([.. AgentDefaults, "cookie", "mita_*", "xsrf*"], ignoreOrder: true);
+        sanitized.ShouldBe([.. AgentDefaults, "cookie", "mita_*", "xsrf*", "referer"], ignoreOrder: true);
     }
 
     [Fact]
