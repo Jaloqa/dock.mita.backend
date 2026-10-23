@@ -6,6 +6,7 @@ namespace Mita.Domain.Categories;
 public sealed class Category : IAuditable
 {
     public const int NameMaxLength = 40;
+    public const int StandardKeyMaxLength = 20;
 
     private Category()
     {
@@ -22,6 +23,8 @@ public sealed class Category : IAuditable
     public CategoryColor Color { get; private set; }
 
     public SystemCategory? System { get; private set; }
+
+    public string? StandardKey { get; private set; }
 
     public int Position { get; private set; }
 
@@ -40,6 +43,7 @@ public sealed class Category : IAuditable
     {
         var category = Create(userId, starter.Names[locale], starter.Kind, starter.Color);
         category.System = starter.System;
+        category.StandardKey = starter.Key;
         category.Position = position;
         return category;
     }

@@ -263,6 +263,10 @@ namespace Mita.Infrastructure.Persistence.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
+                    b.Property<string>("StandardKey")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("System")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
@@ -280,6 +284,10 @@ namespace Mita.Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId", "Kind" }, "IX_categories_user_kind_other")
                         .IsUnique()
                         .HasFilter("\"System\" = 'Other'");
+
+                    b.HasIndex(new[] { "UserId", "Kind", "StandardKey" }, "IX_categories_user_kind_standard_key")
+                        .IsUnique()
+                        .HasFilter("\"StandardKey\" IS NOT NULL");
 
                     b.ToTable("categories", (string)null);
                 });
