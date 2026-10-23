@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Mvc;
 using Mita.Api.Common;
 using Mita.Api.Common.Groups;
 using Mita.Api.Extensions;
@@ -11,11 +12,31 @@ public static class DeleteExpenseEndpoint
     {
         group.MapDelete(
                 "/groups/{id:guid}/expenses/{expenseId:guid}",
-                async (Guid id, Guid expenseId, IMediator mediator, CancellationToken ct) =>
-                    (await mediator.Send(new DeleteExpenseCommand(GroupScope.Owner(id), expenseId), ct))
-                        .ToHttp(() => Results.NoContent()))
+                (Guid id, Guid expenseId, IMediator mediator, CancellationToken ct) =>
+                    DeleteAsync(GroupScope.Owner(id), expenseId, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;
     }
+
+    public static RouteGroupBuilder MapSharedDeleteExpense(this RouteGroupBuilder group)
+    {
+        group.MapDelete(
+            "/expenses/{expenseId:guid}",
+            (
+                string token,
+                Guid expenseId,
+                [FromHeader(Name = GroupAccess.MemberHeader)] string? member,
+                IMediator mediator,
+                CancellationToken ct) => DeleteAsync(GroupScope.Link(token, member), expenseId, mediator, ct));
+
+        return group;
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        GroupScope scope,
+        Guid expenseId,
+        IMediator mediator,
+        CancellationToken ct) =>
+        (await mediator.Send(new DeleteExpenseCommand(scope, expenseId), ct)).ToHttp(() => Results.NoContent());
 }

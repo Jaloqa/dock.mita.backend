@@ -8,6 +8,8 @@ namespace Mita.Api.Common.Groups;
 
 public sealed class GroupAccess(AppDbContext db, ICurrentUser currentUser)
 {
+    public const string MemberHeader = "X-Group-Member";
+
     private static readonly GroupActor LinkReader = new(null, null);
 
     public Task<GroupContext?> OpenAsync(GroupScope scope, GroupLock mode, CancellationToken ct) => scope switch
@@ -16,6 +18,30 @@ public sealed class GroupAccess(AppDbContext db, ICurrentUser currentUser)
         LinkGroupScope link => OpenLinkedAsync(link.Token, mode, ct),
         _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unknown group scope.")
     };
+
+    public async Task<Result<GroupContext>> OpenForWriteAsync(GroupScope scope, GroupLock mode, CancellationToken ct)
+    {
+        var context = await OpenAsync(scope, mode, ct);
+        if (context is null)
+        {
+            return Error.NotFound();
+        }
+
+        if (scope is not LinkGroupScope link)
+        {
+            return context;
+        }
+
+        if (!Guid.TryParse(link.MemberHeader, out var memberId)
+            || !await db.GroupMembers.AnyAsync(
+                member => member.Id == memberId && member.GroupId == context.GroupId,
+                ct))
+        {
+            return GroupErrors.MemberRequired;
+        }
+
+        return context with { Actor = GroupActor.Member(memberId) };
+    }
 
     public async Task<GroupContext?> OpenOwnedAsync(Guid groupId, GroupLock mode, CancellationToken ct)
     {

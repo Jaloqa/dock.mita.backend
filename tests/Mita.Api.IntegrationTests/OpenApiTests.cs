@@ -276,11 +276,22 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
     public async Task Should_DescribeSharedGroups()
     {
         const string prefix = "/v1/shared/groups/{token}";
-        string[] suffixes =
-        [
-            "", "/balances", "/expenses", "/expenses/{expenseId}/history", "/repayments",
-            "/repayments/{repaymentId}/history", "/rates"
-        ];
+        string[] methods = ["get", "put", "post", "delete", "patch", "head", "options", "trace"];
+        var operations = new Dictionary<string, string[]>
+        {
+            [""] = ["get"],
+            ["/balances"] = ["get"],
+            ["/categories"] = ["post"],
+            ["/expenses"] = ["get", "post"],
+            ["/expenses/{expenseId}"] = ["put", "delete"],
+            ["/expenses/{expenseId}/restore"] = ["post"],
+            ["/expenses/{expenseId}/history"] = ["get"],
+            ["/repayments"] = ["get", "post"],
+            ["/repayments/{repaymentId}"] = ["put", "delete"],
+            ["/repayments/{repaymentId}/restore"] = ["post"],
+            ["/repayments/{repaymentId}/history"] = ["get"],
+            ["/rates"] = ["get"]
+        };
         using var client = factory.CreateClient();
 
         using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
@@ -291,20 +302,31 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         paths.EnumerateObject()
             .Select(path => path.Name)
             .Where(path => path.StartsWith(prefix, StringComparison.Ordinal))
-            .ShouldBe(suffixes.Select(suffix => prefix + suffix), ignoreOrder: true);
-        foreach (var suffix in suffixes)
+            .ShouldBe(operations.Keys.Select(suffix => prefix + suffix), ignoreOrder: true);
+        foreach (var (suffix, expected) in operations)
         {
             var item = paths.GetProperty(prefix + suffix);
-            item.TryGetProperty("post", out _).ShouldBeFalse();
-            item.TryGetProperty("put", out _).ShouldBeFalse();
-            item.TryGetProperty("delete", out _).ShouldBeFalse();
-            var get = item.GetProperty("get");
-            TagOf(get).ShouldBe("Shared groups");
-            get.TryGetProperty("security", out _).ShouldBeFalse();
-            get.GetProperty("parameters").EnumerateArray()
-                .Where(parameter => parameter.GetProperty("in").GetString() == "path")
-                .Select(parameter => parameter.GetProperty("name").GetString())
-                .ShouldContain("token", prefix + suffix);
+            item.EnumerateObject()
+                .Select(property => property.Name)
+                .Where(methods.Contains)
+                .ShouldBe(expected, ignoreOrder: true, customMessage: prefix + suffix);
+            foreach (var method in expected)
+            {
+                var operation = item.GetProperty(method);
+                var name = $"{method} {prefix}{suffix}";
+                TagOf(operation).ShouldBe("Shared groups", name);
+                operation.TryGetProperty("security", out _).ShouldBeFalse(name);
+                var parameters = operation.GetProperty("parameters").EnumerateArray().ToList();
+                parameters
+                    .Where(parameter => parameter.GetProperty("in").GetString() == "path")
+                    .Select(parameter => parameter.GetProperty("name").GetString())
+                    .ShouldContain("token", name);
+                string?[] expectedHeaders = method == "get" ? [] : ["X-Group-Member"];
+                parameters
+                    .Where(parameter => parameter.GetProperty("in").GetString() == "header")
+                    .Select(parameter => parameter.GetProperty("name").GetString())
+                    .ShouldBe(expectedHeaders, customMessage: name);
+            }
         }
 
         ParameterNames(paths.GetProperty($"{prefix}/expenses").GetProperty("get")).ShouldContain("deleted");

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.Extensions.Options;
 using Mita.Api.Authentication;
+using Mita.Api.Common.Groups;
 using Mita.Api.Configuration;
 using Mita.Api.Middleware;
 
@@ -9,7 +10,10 @@ namespace Mita.Api.Extensions;
 public static class CorsExtensions
 {
     private static readonly string[] AllowedHeaders =
-        ["Content-Type", AuthCookies.XsrfHeader, "Accept-Language", CorrelationIdMiddleware.HeaderName];
+    [
+        "Content-Type", AuthCookies.XsrfHeader, "Accept-Language", CorrelationIdMiddleware.HeaderName,
+        GroupAccess.MemberHeader
+    ];
 
     private static readonly string[] AllowedMethods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
