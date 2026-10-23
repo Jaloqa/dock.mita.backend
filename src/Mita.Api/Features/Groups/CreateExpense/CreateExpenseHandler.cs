@@ -15,11 +15,13 @@ public sealed class CreateExpenseHandler(AppDbContext db, GroupAccess access, Gr
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var group = await access.OpenAsync(command.Scope, GroupLock.Share, cancellationToken);
-        if (group is null)
+        var opened = await access.OpenForWriteAsync(command.Scope, GroupLock.Share, cancellationToken);
+        if (!opened.IsSuccess)
         {
-            return Error.NotFound();
+            return opened.Error!;
         }
+
+        var group = opened.Value;
 
         var prepared = await writer.PrepareAsync(group, input, cancellationToken);
         if (!prepared.IsSuccess)

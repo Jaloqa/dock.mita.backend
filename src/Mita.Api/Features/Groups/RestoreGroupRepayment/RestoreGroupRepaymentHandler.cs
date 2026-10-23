@@ -15,11 +15,13 @@ public sealed class RestoreGroupRepaymentHandler(AppDbContext db, GroupAccess ac
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var group = await access.OpenAsync(command.Scope, GroupLock.Share, cancellationToken);
-        if (group is null)
+        var opened = await access.OpenForWriteAsync(command.Scope, GroupLock.Share, cancellationToken);
+        if (!opened.IsSuccess)
         {
-            return Error.NotFound();
+            return opened.Error!;
         }
+
+        var group = opened.Value;
 
         var repayment = await db.LockRepaymentAsync(group.GroupId, command.RepaymentId, deleted: true, cancellationToken);
         if (repayment is null)

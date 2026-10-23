@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Mvc;
 using Mita.Api.Common;
 using Mita.Api.Common.Groups;
 using Mita.Api.Extensions;
@@ -11,11 +12,32 @@ public static class DeleteGroupRepaymentEndpoint
     {
         group.MapDelete(
                 "/groups/{id:guid}/repayments/{repaymentId:guid}",
-                async (Guid id, Guid repaymentId, IMediator mediator, CancellationToken ct) =>
-                    (await mediator.Send(new DeleteGroupRepaymentCommand(GroupScope.Owner(id), repaymentId), ct))
-                        .ToHttp(() => Results.NoContent()))
+                (Guid id, Guid repaymentId, IMediator mediator, CancellationToken ct) =>
+                    DeleteAsync(GroupScope.Owner(id), repaymentId, mediator, ct))
             .RequireAuthorization(AuthExtensions.UserPolicy);
 
         return group;
     }
+
+    public static RouteGroupBuilder MapSharedDeleteGroupRepayment(this RouteGroupBuilder group)
+    {
+        group.MapDelete(
+            "/repayments/{repaymentId:guid}",
+            (
+                string token,
+                Guid repaymentId,
+                [FromHeader(Name = GroupAccess.MemberHeader)] string? member,
+                IMediator mediator,
+                CancellationToken ct) => DeleteAsync(GroupScope.Link(token, member), repaymentId, mediator, ct));
+
+        return group;
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        GroupScope scope,
+        Guid repaymentId,
+        IMediator mediator,
+        CancellationToken ct) =>
+        (await mediator.Send(new DeleteGroupRepaymentCommand(scope, repaymentId), ct))
+            .ToHttp(() => Results.NoContent());
 }

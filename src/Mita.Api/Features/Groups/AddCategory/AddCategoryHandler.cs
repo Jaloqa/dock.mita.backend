@@ -16,11 +16,13 @@ public sealed class AddCategoryHandler(AppDbContext db, GroupAccess access)
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var context = await access.OpenAsync(command.Scope, GroupLock.Update, cancellationToken);
-        if (context is null)
+        var opened = await access.OpenForWriteAsync(command.Scope, GroupLock.Update, cancellationToken);
+        if (!opened.IsSuccess)
         {
-            return Error.NotFound();
+            return opened.Error!;
         }
+
+        var context = opened.Value;
 
         var existing = await db.GroupCategories.AsNoTracking()
             .Where(category => category.GroupId == context.GroupId)
