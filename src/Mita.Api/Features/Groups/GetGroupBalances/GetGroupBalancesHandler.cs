@@ -51,44 +51,8 @@ public sealed class GetGroupBalancesHandler(AppDbContext db, GroupAccess access,
             .Select(member => member.Id)
             .ToListAsync(cancellationToken);
 
-        var paid = await db.GroupExpenses.AsNoTracking()
-            .Where(expense => expense.GroupId == context.GroupId && expense.DeletedAt == null)
-            .GroupBy(expense => expense.PayerId)
-            .Select(byPayer => new { MemberId = byPayer.Key, Amount = byPayer.Sum(expense => expense.GroupAmount) })
-            .ToDictionaryAsync(row => row.MemberId, row => row.Amount, cancellationToken);
-
-        var shares = await db.GroupExpenseShares.AsNoTracking()
-            .Join(
-                db.GroupExpenses.AsNoTracking()
-                    .Where(expense => expense.GroupId == context.GroupId && expense.DeletedAt == null),
-                share => share.ExpenseId,
-                expense => expense.Id,
-                (share, _) => share)
-            .GroupBy(share => share.MemberId)
-            .Select(byMember => new { MemberId = byMember.Key, Amount = byMember.Sum(share => share.GroupAmount) })
-            .ToDictionaryAsync(row => row.MemberId, row => row.Amount, cancellationToken);
-
-        var repayments = db.GroupRepayments.AsNoTracking()
-            .Where(repayment => repayment.GroupId == context.GroupId && repayment.DeletedAt == null);
-
-        var sent = await repayments
-            .GroupBy(repayment => repayment.FromMemberId)
-            .Select(bySender => new { MemberId = bySender.Key, Amount = bySender.Sum(repayment => repayment.GroupAmount) })
-            .ToDictionaryAsync(row => row.MemberId, row => row.Amount, cancellationToken);
-
-        var received = await repayments
-            .GroupBy(repayment => repayment.ToMemberId)
-            .Select(byReceiver => new { MemberId = byReceiver.Key, Amount = byReceiver.Sum(repayment => repayment.GroupAmount) })
-            .ToDictionaryAsync(row => row.MemberId, row => row.Amount, cancellationToken);
-
-        var members = memberIds
-            .Select(memberId => new MemberFigures(
-                memberId,
-                paid.GetValueOrDefault(memberId),
-                shares.GetValueOrDefault(memberId),
-                sent.GetValueOrDefault(memberId),
-                received.GetValueOrDefault(memberId)))
-            .ToList();
+        var figures = await db.FiguresAsync(memberIds, cancellationToken);
+        var members = memberIds.Select(memberId => figures[memberId]).ToList();
 
         var transfers = GroupSettlement.Suggest([.. members.Select(member => (member.MemberId, member.Balance))]);
 
@@ -113,10 +77,5 @@ public sealed class GetGroupBalancesHandler(AppDbContext db, GroupAccess access,
                     transfer.ToMemberId,
                     InView(transfer.Amount)))
             ]);
-    }
-
-    private sealed record MemberFigures(Guid MemberId, long Paid, long Share, long Sent, long Received)
-    {
-        public long Balance => Paid - Share + Sent - Received;
     }
 }
