@@ -1,4 +1,4 @@
-# API contract: authentication, users, settings, accounts, transfers, rates, categories, transactions, tags, budgets, goals, debts, overview and reports
+# API contract: authentication, users, settings, accounts, transfers, rates, categories, transactions, tags, budgets, goals, debts, groups, overview and reports
 
 This document describes the HTTP contract of API version 1 for the frontend switch-over from mocks to the real backend. The OpenAPI document is served at `/openapi/v1.json`, and Scalar at `/scalar` in the Development environment.
 
@@ -53,6 +53,28 @@ All paths are prefixed with `/v1`. Request and response bodies are JSON with cam
 | GET | `/v1/debts/{id}/repayments?page&pageSize` | required | none | 200 `Page<DebtRepayment>` | 400, 401, 404 |
 | POST | `/v1/debts/{id}/repayments` | required | `DebtRepaymentInput` | 200 `Debt`, no `Location` header | 400, 401, 403, 404, 503 |
 | DELETE | `/v1/debts/{id}/repayments/{repaymentId}` | required | none | 204 | 401, 403, 404 |
+| GET | `/v1/groups?page&pageSize` | required | none | 200 `Page<GroupSummary>` | 400, 401 |
+| POST | `/v1/groups` | required | `GroupInput` | 201 `Group`, `Location` header | 400, 401, 403 |
+| GET | `/v1/groups/{id}` | required | none | 200 `Group` | 401, 404 |
+| PUT | `/v1/groups/{id}` | required | `GroupUpdateInput` | 200 `Group` | 400, 401, 403, 404 |
+| DELETE | `/v1/groups/{id}` | required | none | 204 | 401, 403, 404 |
+| POST | `/v1/groups/{id}/members` | required | `GroupNameInput` | 201 `GroupMember`, no `Location` header | 400, 401, 403, 404 |
+| PUT | `/v1/groups/{id}/members/{memberId}` | required | `GroupNameInput` | 200 `GroupMember` | 400, 401, 403, 404 |
+| DELETE | `/v1/groups/{id}/members/{memberId}` | required | none | 204 | 400, 401, 403, 404 |
+| POST | `/v1/groups/{id}/categories` | required | `GroupNameInput` | 201 `GroupCategory`, no `Location` header | 400, 401, 403, 404 |
+| GET | `/v1/groups/{id}/expenses?deleted&page&pageSize` | required | none | 200 `Page<GroupExpense>` | 400, 401, 404 |
+| POST | `/v1/groups/{id}/expenses` | required | `GroupExpenseInput` | 201 `GroupExpense`, no `Location` header | 400, 401, 403, 404, 503 |
+| PUT | `/v1/groups/{id}/expenses/{expenseId}` | required | `GroupExpenseInput` | 200 `GroupExpense` | 400, 401, 403, 404, 503 |
+| DELETE | `/v1/groups/{id}/expenses/{expenseId}` | required | none | 204 | 401, 403, 404 |
+| POST | `/v1/groups/{id}/expenses/{expenseId}/restore` | required | none | 200 `GroupExpense` | 401, 403, 404 |
+| GET | `/v1/groups/{id}/expenses/{expenseId}/history?page&pageSize` | required | none | 200 `Page<GroupEntryEvent<GroupExpenseState>>` | 400, 401, 404 |
+| GET | `/v1/groups/{id}/repayments?deleted&page&pageSize` | required | none | 200 `Page<GroupRepayment>` | 400, 401, 404 |
+| POST | `/v1/groups/{id}/repayments` | required | `GroupRepaymentInput` | 201 `GroupRepayment`, no `Location` header | 400, 401, 403, 404, 503 |
+| PUT | `/v1/groups/{id}/repayments/{repaymentId}` | required | `GroupRepaymentInput` | 200 `GroupRepayment` | 400, 401, 403, 404, 503 |
+| DELETE | `/v1/groups/{id}/repayments/{repaymentId}` | required | none | 204 | 401, 403, 404 |
+| POST | `/v1/groups/{id}/repayments/{repaymentId}/restore` | required | none | 200 `GroupRepayment` | 401, 403, 404 |
+| GET | `/v1/groups/{id}/repayments/{repaymentId}/history?page&pageSize` | required | none | 200 `Page<GroupEntryEvent<GroupRepaymentState>>` | 400, 401, 404 |
+| GET | `/v1/groups/{id}/balances?currency` | required | none | 200 `GroupBalances` | 400, 401, 404, 503 |
 | GET | `/v1/overview?period` | required | none | 200 `Overview` | 400, 401, 503 |
 | GET | `/v1/reports?range` | required | none | 200 `Report` | 400, 401 |
 
@@ -367,6 +389,188 @@ type DebtRepaymentInput = {
   note?: string | null;   // up to 200 characters after trimming
 };
 
+type GroupSummary = {
+  id: string;             // GUID
+  name: string;
+  currency: Currency;     // the main currency of the group
+  members: number;        // the number of members
+  total: number;          // minor units of the main currency: the sum of groupAmount over the live expenses
+};
+
+type Group = {
+  id: string;             // GUID
+  name: string;           // 1 to 40 characters, stored trimmed
+  currency: Currency;     // the main currency: every entry is converted into it
+  currencyLocked: boolean; // the group has an expense or a repayment, deleted ones included, so the currency cannot change
+  total: number;          // minor units of the main currency: the sum of groupAmount over the live expenses
+  members: GroupMember[]; // in member order, at most 50
+  categories: GroupCategory[]; // the 9 standard categories in this order (groceries, transport, housing, cafes, health, shopping, leisure, gifts, other), then the group's own in creation order, at most 100 of them
+};
+
+type GroupMember = {
+  id: string;             // GUID
+  name: string;           // 1 to 40 characters, stored trimmed, unique per group case-insensitively
+  inUse: boolean;         // a history event of the group names the member, as its actor or in its state (payer, share, either side of a repayment), deleted entries and earlier states included: it can be renamed but not removed
+};
+
+type GroupCategory = {
+  id: string;             // a standard key (groceries, transport, housing, cafes, health, shopping, leisure, gifts, other) or the GUID of a category of the group
+  standard: boolean;      // true for the 9 standard keys
+  name: string | null;    // null for a standard category (the client translates the key), the stored name for a category of the group
+};
+
+type GroupInput = {
+  name: string;           // 1 to 40 characters after trimming, no control characters
+  currency: Currency;     // any supported currency, the main currency of the group
+  members: string[];      // 1 to 50 names, each 1 to 40 characters after trimming with no control characters, unique case-insensitively; the order of the array is the member order
+};
+
+type GroupUpdateInput = {
+  name: string;           // as in GroupInput
+  currency: Currency;     // changes only while the group has no expense and no repayment, deleted ones included
+};
+
+type GroupNameInput = {
+  name: string;           // 1 to 40 characters after trimming, no control characters. A member name is unique per group case-insensitively. A category name is unique per group case-insensitively and differs from the name of every standard category in en, pl, ru and uk
+};
+
+type GroupActor = {
+  kind: 'owner' | 'member'; // always 'owner' in this release
+  memberId: string | null;  // null for the owner
+  name: string;             // the current name of the owner (the user) or of the member
+};
+
+type GroupShare = {
+  memberId: string;       // GUID
+  amount: number;         // minor units of the expense currency, always 1 or more; the shares of an expense add up to its amount
+  groupAmount: number;    // minor units of the main currency, 0 or more; the shares of an expense add up to its groupAmount
+};
+
+type GroupSplitInput =
+  | { mode: 'equal'; memberIds: string[] }  // 1 to 50 distinct members of the group; a member whose equal share rounds to 0 gets no share
+  | { mode: 'exact'; shares: { memberId: string; amount: number }[] }; // 1 to 50 distinct members, each amount an integer from 1 to the expense amount, adding up to it
+
+type GroupExpense = {
+  id: string;             // GUID
+  payerId: string;        // a member of the group
+  amount: number;         // minor units of `currency`
+  currency: Currency;     // the expense currency
+  date: string;           // YYYY-MM-DD
+  categoryId: string;     // a standard key or the GUID of a category of the group
+  tags: string[];         // trimmed, in the spelling entered first, [] when none
+  description: string | null; // stored trimmed, null when blank
+  rate: number;           // expense currency to main currency per major unit, 1 for the same currency
+  rateManual: boolean;    // true when `rate` is a manual rate that was sent with the entry
+  groupAmount: number;    // minor units of the main currency: `amount` converted with `rate`
+  split: 'equal' | 'exact'; // how the expense was split
+  shares: GroupShare[];   // in member order, one per member that shares
+  deleted: boolean;
+  createdBy: GroupActor;
+  createdAt: string;      // UTC ISO 8601 with milliseconds
+  updatedBy: GroupActor | null; // the actor of the newest change after creation (edit, delete or restore), null when never changed
+  updatedAt: string | null; // UTC ISO 8601 with milliseconds
+};
+
+type GroupExpenseInput = {
+  payerId: string;        // a member of the group
+  amount: number;         // integer minor units of `currency`, 1 to 100000000000
+  currency: Currency;     // any supported currency, converted into the main currency
+  date: string;           // YYYY-MM-DD, at most one year after today (UTC)
+  categoryId?: string | null; // a standard key (lower case, exactly as listed) or the GUID of a category of the group; missing, null or blank means "other"
+  tags?: string[];        // tag names, each 1 to 30 characters after trimming with no control characters, at most 10 distinct case-insensitively; missing or null means no tags
+  description?: string | null; // up to 100 characters after trimming, no control characters
+  rate?: number;          // manual rate per major unit, 0 < rate <= 1000000000; a blank string counts as missing; not used for the main currency, but still validated
+  split?: GroupSplitInput | null; // missing or null: equal between every current member of the group
+};
+
+type GroupExpenseState = {
+  // the expense after a change: the fields of GroupExpense without id, deleted, createdBy, createdAt, updatedBy and updatedAt
+  payerId: string;
+  amount: number;
+  currency: Currency;
+  date: string;           // YYYY-MM-DD
+  categoryId: string;
+  tags: string[];
+  description: string | null;
+  rate: number;
+  rateManual: boolean;
+  groupAmount: number;
+  split: 'equal' | 'exact';
+  shares: GroupShare[];   // in member order
+};
+
+type GroupRepayment = {
+  id: string;             // GUID
+  fromMemberId: string;   // the member who paid
+  toMemberId: string;     // the member who received, a different one
+  amount: number;         // minor units of `currency`
+  currency: Currency;     // the repayment currency
+  date: string;           // YYYY-MM-DD
+  rate: number;           // repayment currency to main currency per major unit, 1 for the same currency
+  rateManual: boolean;    // true when `rate` is a manual rate that was sent with the entry
+  groupAmount: number;    // minor units of the main currency: `amount` converted with `rate`
+  note: string | null;    // stored trimmed, null when blank
+  deleted: boolean;
+  createdBy: GroupActor;
+  createdAt: string;      // UTC ISO 8601 with milliseconds
+  updatedBy: GroupActor | null; // the actor of the newest change after creation (edit, delete or restore), null when never changed
+  updatedAt: string | null; // UTC ISO 8601 with milliseconds
+};
+
+type GroupRepaymentInput = {
+  fromMemberId: string;   // a member of the group
+  toMemberId: string;     // another member of the group
+  amount: number;         // integer minor units of `currency`, 1 to 100000000000
+  currency: Currency;     // any supported currency, converted into the main currency
+  date: string;           // YYYY-MM-DD, at most one year after today (UTC)
+  rate?: number;          // manual rate per major unit, 0 < rate <= 1000000000; a blank string counts as missing; not used for the main currency, but still validated
+  note?: string | null;   // up to 200 characters after trimming, no control characters
+};
+
+type GroupRepaymentState = {
+  // the repayment after a change: the fields of GroupRepayment without id, deleted, createdBy, createdAt, updatedBy and updatedAt
+  fromMemberId: string;
+  toMemberId: string;
+  amount: number;
+  currency: Currency;
+  date: string;           // YYYY-MM-DD
+  rate: number;
+  rateManual: boolean;
+  groupAmount: number;
+  note: string | null;
+};
+
+type GroupEntryEvent<T> = {
+  id: string;             // GUID
+  action: 'created' | 'updated' | 'deleted' | 'restored';
+  at: string;             // UTC ISO 8601 with milliseconds
+  actor: GroupActor;
+  state: T;               // the entry as it was right after the change
+};
+
+type GroupMemberBalance = {
+  memberId: string;       // GUID
+  paid: number;           // minor units: the groupAmount of the live expenses the member paid
+  share: number;          // the member's groupAmount shares of the live expenses
+  sent: number;           // the groupAmount of the live repayments the member sent
+  received: number;       // the groupAmount of the live repayments the member received
+  balance: number;        // paid - share + sent - received, positive when the others owe the member
+};
+
+type GroupTransfer = {
+  fromMemberId: string;   // the member who pays
+  toMemberId: string;     // the member who receives
+  amount: number;         // minor units, above 0
+};
+
+type GroupBalances = {
+  currency: Currency;     // the currency of every figure: the `currency` query, the main currency without it
+  groupCurrency: Currency; // the main currency of the group
+  total: number;          // the sum of groupAmount over the live expenses
+  members: GroupMemberBalance[]; // every member, in member order
+  transfers: GroupTransfer[];    // the suggested transfers that settle every balance, [] when all are 0
+};
+
 type Overview = {
   range: 'week' | 'month' | 'year';
   from: string;           // YYYY-MM-DD, first day of the range
@@ -565,31 +769,31 @@ Every error is an RFC 9457 `application/problem+json` document:
 
 | Code | Meaning |
 | --- | --- |
-| `validation.required` | the field is missing, null or blank, including the `name` of `PUT /v1/tags/{id}`. Goal `deadline` and `accountId` and contribution `rate` are optional, and `fromAccountId` is required only for a linked goal. A debt needs `direction`, `counterparty`, `amount`, `currency` and `date`, and a repayment needs `date`, `amount` and `currency`: the other fields of both are optional. `GET /v1/rates` needs at least one of `from` and `to`: when both are missing, `to` is reported (field `to`) |
+| `validation.required` | the field is missing, null or blank, including the `name` of `PUT /v1/tags/{id}`. Goal `deadline` and `accountId` and contribution `rate` are optional, and `fromAccountId` is required only for a linked goal. A debt needs `direction`, `counterparty`, `amount`, `currency` and `date`, and a repayment needs `date`, `amount` and `currency`: the other fields of both are optional. A group needs `name`, `currency` and `members` (at least one name), a group update `name` and `currency`, and a group member or group category `name`. A group expense needs `payerId`, `amount`, `currency` and `date`, and a group repayment `fromMemberId`, `toMemberId`, `amount`, `currency` and `date`: the other fields of both are optional. `GET /v1/rates` needs at least one of `from` and `to`: when both are missing, `to` is reported (field `to`) |
 | `validation.invalidEmail` | the email is not a valid address. On login it is returned only when the email contains a control character |
 | `validation.emailTaken` | register, or `PUT /v1/me`: another account uses this email |
-| `validation.nameTooLong` | the name is longer than 40 characters after trimming (users, accounts, categories and goals), or the debt `counterparty` is |
+| `validation.nameTooLong` | the name is longer than 40 characters after trimming (users, accounts, categories and goals), or the debt `counterparty` is, or a group `name`, a group member name (in `members` or as `name`) or a group category `name` is |
 | `validation.passwordTooShort` | register: fewer than 10 characters |
 | `validation.passwordTooLong` | register: more than 128 characters |
 | `validation.invalidPassword` | `DELETE /v1/me`: the password is wrong, or the account is locked after repeated failures (field `password`) |
-| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency (anything but exactly three upper-case letters naming one of the 148 supported codes, so `jpy`, ` JPY` and `XDR` are refused), a `baseCurrency` other than PLN, EUR, USD or UAH, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value (minor units of its own currency), a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 minor units of the target account currency (reported under `rate`, also when the product is too large to represent). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers, and for `tags` a value that is not an array, an element that is not a string, and an element that is blank or contains a control character (checked before `tagTooLong` and `tooManyTags`). On tags it covers a `name` that is not a string or contains a control character. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. On debts it covers an unknown `direction` or `currency`, a `counterparty` or `note` that is not a string or contains a control character, a `dueDate` that is not a real `YYYY-MM-DD`, and the same rules for `amount`, `date`, `rate` and the converted `accountAmount` as on transactions. On repayments it covers an unknown `currency`, a `note` that is not a string or contains a control character, and the same rules for `amount`, `date`, `rate` and the converted `debtAmount` and `accountAmount` as on transfers. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `tagIds`, `date`, `from`, `to`, `kind`, `sort`, debt `status` (anything but `open` or `settled`, case-sensitive), budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive) or report `range` (anything but `3m`, `6m` or `12m`) |
+| `validation.invalidValue` | the value is of the wrong type or outside the allowed set, for example an unknown currency (anything but exactly three upper-case letters naming one of the 148 supported codes, so `jpy`, ` JPY` and `XDR` are refused), a `baseCurrency` other than PLN, EUR, USD or UAH, a `monthStartDay` outside 1 to 28 or a name containing a control character. On accounts and transfers it also covers an amount that is not an integer or is above 100000000000 in absolute value (minor units of its own currency), a `date` that is not a real `YYYY-MM-DD`, a manual `rate` that is not a JSON number, is not greater than 0 or is above 1000000000, a `note` that is not a string or is longer than 200 characters, and a converted transfer amount above 100000000000 minor units of the target account currency (reported under `rate`, also when the product is too large to represent). On categories it covers an unknown `kind` or `color`. On transactions it covers an unknown `kind` or `currency`, a `title` or `note` that is not a string, and the same rules for `amount`, `date`, `rate` and the converted amount as on transfers, and for `tags` a value that is not an array, an element that is not a string, and an element that is blank or contains a control character (checked before `tagTooLong` and `tooManyTags`). On tags it covers a `name` that is not a string or contains a control character. On budgets it covers a `period` that is not a `YYYY-MM` key between 1970-01 and 2099-12 and a `limit` that is not an integer or is above 100000000000. On goals it covers a `name` that is not a string or contains a control character, a `target` that is not an integer or is above 100000000000, and a `deadline` that is not a `YYYY-MM` key or is more than 600 months after the current month. On contributions it covers the same rules for `amount`, `date` and `rate` as on transfers. On debts it covers an unknown `direction` or `currency`, a `counterparty` or `note` that is not a string or contains a control character, a `dueDate` that is not a real `YYYY-MM-DD`, and the same rules for `amount`, `date`, `rate` and the converted `accountAmount` as on transactions. On repayments it covers an unknown `currency`, a `note` that is not a string or contains a control character, and the same rules for `amount`, `date`, `rate` and the converted `debtAmount` and `accountAmount` as on transfers. On groups it covers a `name` (of a group, a group member or a group category) that is not a string or contains a control character, an unknown `currency`, and `members` that is not an array or holds an element that is not a string, is blank or contains a control character (checked before `nameTooLong`, `tooManyMembers` and `memberNameTaken`). On group expenses and group repayments it covers an unknown `currency`, a `description` or `note` that is not a string or contains a control character, the same rules for `amount`, `date` and `rate` as on transfers (a blank `rate` string counts as missing), for `tags` the rules of transactions, and a converted `groupAmount` above 100000000000 minor units of the main currency (reported under `rate`). A `split` that is not an object (a blank string, a number or an array included), has a `mode` other than `equal` or `exact`, has no `memberIds` (equal) or `shares` (exact) array of 1 to 50 elements, repeats a member, or holds an exact share that is not an object or has no integer `amount` from 1 to 100000000000 is `split: ["validation.invalidValue"]`; this shape check wins over `validation.unknownMember` and `validation.splitMismatch`. In queries it is returned under the parameter name for an invalid `page`, `pageSize`, `accountId`, `categoryId`, `tagIds`, `date`, `from`, `to`, `kind`, `sort`, debt `status` (anything but `open` or `settled`, case-sensitive), budget `period`, overview `period` (anything but `week`, `month` or `year`, case-sensitive), report `range` (anything but `3m`, `6m` or `12m`), the `deleted` flag of the group expense and repayment lists (anything but `true` or `false`, case-sensitive; missing means `false`) or the `currency` of `GET /v1/groups/{id}/balances` (the rule of every currency above) |
 | `validation.currencyLocked` | `PUT /v1/accounts/{id}`: the currency of an account that is in use (it has a transfer, a transaction, a debt or a repayment) cannot change (field `currency`) |
 | `validation.cardLast4` | `cardLast4` is present, not blank and not exactly 4 digits. Checked for every account type |
 | `validation.accountInUse` | `DELETE /v1/accounts/{id}`: the account has transfers, transactions, debts or repayments, so it can only be archived (field `id`) |
-| `validation.dateTooFar` | transfer, transaction, goal contribution, debt or repayment `date` is later than today plus one year |
+| `validation.dateTooFar` | transfer, transaction, goal contribution, debt, repayment, group expense or group repayment `date` is later than today plus one year |
 | `validation.unknownAccount` | transfer `fromAccountId` or `toAccountId`, transaction `accountId`, goal `accountId`, contribution `fromAccountId`, debt `accountId` or repayment `accountId` is not one of the user's accounts (or not a GUID) |
 | `validation.archivedAccount` | transfer `fromAccountId` or `toAccountId`, transaction `accountId`, goal `accountId`, contribution `fromAccountId`, debt `accountId` or repayment `accountId` is an archived account. A contribution to a goal whose linked account is archived answers it under `accountId`. On `PUT /v1/transactions/{id}` the account the transaction already has is allowed even when archived, `PUT /v1/goals/{id}` may keep the account the goal is already linked to, and `PUT /v1/debts/{id}` may keep the account the debt already has |
 | `validation.sameAccount` | transfer `toAccountId` equals `fromAccountId`, or a contribution `fromAccountId` equals the account the goal is linked to |
-| `validation.positiveAmount` | transfer `fromAmount`, transaction `amount`, budget `limit`, goal `target`, contribution `amount`, debt `amount` or repayment `amount` is 0 or negative, or the converted amount rounds to 0 (reported under `rate`: the `accountAmount` of a debt, the `debtAmount` or `accountAmount` of a repayment) |
-| `validation.categoryNameTaken` | `POST`/`PUT /v1/categories`: another category of the same kind has this name, compared case-insensitively after trimming (field `name`) |
+| `validation.positiveAmount` | transfer `fromAmount`, transaction `amount`, budget `limit`, goal `target`, contribution `amount`, debt `amount`, repayment `amount`, group expense `amount` or group repayment `amount` is 0 or negative, or the converted amount rounds to 0 (reported under `rate`: the `accountAmount` of a debt, the `debtAmount` or `accountAmount` of a repayment, the `groupAmount` of a group expense or group repayment) |
+| `validation.categoryNameTaken` | `POST`/`PUT /v1/categories`: another category of the same kind has this name, compared case-insensitively after trimming (field `name`). `POST /v1/groups/{id}/categories`: another category of the group has this name, or it is the name of a standard category in any of en, pl, ru and uk, compared the same way (field `name`). Checked before `tooManyCategories` |
 | `validation.categoryKindLocked` | `PUT /v1/categories/{id}`: the kind of a system category, or of a category that is in use, cannot change (field `kind`) |
 | `validation.systemCategory` | `DELETE /v1/categories/{id}`: a system category cannot be deleted (field `id`) |
-| `validation.unknownCategory` | transaction or budget `categoryId` is not one of the user's categories, is not a GUID, or is the `transfer` category. Also returned when the category was deleted at the same moment |
+| `validation.unknownCategory` | transaction or budget `categoryId` is not one of the user's categories, is not a GUID, or is the `transfer` category. Also returned when the category was deleted at the same moment. Group expense `categoryId` is neither one of the 9 standard keys (lower case, case-sensitive: `Groceries` and `transfer` are refused) nor a GUID (checked with the shape of the body), or is a GUID that is not a category of this group (checked after the group lookup, together with the member references) |
 | `validation.categoryKindMismatch` | transaction `categoryId` has a different kind than the transaction `kind`. Checked only when `kind` itself is valid |
-| `validation.titleTooLong` | transaction `title` is longer than 100 characters after trimming |
-| `validation.noteTooLong` | transaction, debt or repayment `note` is longer than 200 characters after trimming (transfers report this as `validation.invalidValue`) |
-| `validation.tagTooLong` | a transaction tag, or the `name` of `PUT /v1/tags/{id}`, is longer than 30 characters after trimming (field `tags` or `name`) |
-| `validation.tooManyTags` | transaction `tags` holds more than 10 distinct names, compared case-insensitively (field `tags`) |
+| `validation.titleTooLong` | transaction `title`, or group expense `description`, is longer than 100 characters after trimming |
+| `validation.noteTooLong` | transaction, debt, repayment or group repayment `note` is longer than 200 characters after trimming (transfers report this as `validation.invalidValue`) |
+| `validation.tagTooLong` | a transaction or group expense tag, or the `name` of `PUT /v1/tags/{id}`, is longer than 30 characters after trimming (field `tags` or `name`) |
+| `validation.tooManyTags` | transaction or group expense `tags` holds more than 10 distinct names, compared case-insensitively (field `tags`) |
 | `validation.tagNameTaken` | `PUT /v1/tags/{id}`: another tag of the user has this name, compared case-insensitively after trimming (field `name`) |
 | `validation.expenseCategoryOnly` | `POST`/`PUT /v1/budgets`: `categoryId` is an income category (field `categoryId`) |
 | `validation.budgetExists` | `POST`/`PUT /v1/budgets`: the category already has a budget in this period. Also returned when another request created it at the same moment. Checked only when `period` is valid (field `categoryId`) |
@@ -600,6 +804,14 @@ Every error is an RFC 9457 `application/problem+json` document:
 | `validation.exceedsRemaining` | `POST /v1/debts/{id}/repayments`: the repayment, converted into the debt currency (`debtAmount`), is above the remaining amount of the debt. Also returned for a settled debt (field `amount`) |
 | `validation.belowRepaid` | `PUT /v1/debts/{id}`: `amount` is below the amount already repaid (field `amount`) |
 | `validation.debtCurrencyLocked` | `PUT /v1/debts/{id}`: the currency of a debt that has a repayment cannot change (field `currency`) |
+| `validation.memberNameTaken` | `POST /v1/groups`: two names in `members` are equal, compared case-insensitively after trimming (field `members`). `POST /v1/groups/{id}/members` and `PUT /v1/groups/{id}/members/{memberId}`: another member of the group has this name, compared the same way (field `name`). It is the last rule of `members` on `POST /v1/groups` (after `tooManyMembers`) and is checked before `tooManyMembers` on `POST /v1/groups/{id}/members` |
+| `validation.tooManyMembers` | `POST /v1/groups`: `members` holds more than 50 names (field `members`). `POST /v1/groups/{id}/members`: the group already has 50 members (field `name`), checked only after `memberNameTaken`. On `POST /v1/groups` it comes after `nameTooLong` and before `memberNameTaken` |
+| `validation.memberInUse` | `DELETE /v1/groups/{id}/members/{memberId}`: a history event of the group names the member, as its actor or in its state (payer, share, either side of a repayment), deleted entries and earlier states included (field `memberId`) |
+| `validation.unknownMember` | a member reference of a group expense or group repayment is not a GUID, or is not a member of this group: `payerId`, a member of `split` (field `split`), `fromMemberId` or `toMemberId`. A value that is not a GUID, including an exact share without `memberId`, is reported with the shape of the body (but a `split` that also fails a shape check, such as a repeated member, answers `invalidValue` alone), an unknown GUID after the group lookup, together with the other references |
+| `validation.sameMember` | group repayment `toMemberId` equals `fromMemberId` (field `toMemberId`). Checked only when both are GUIDs |
+| `validation.splitMismatch` | group expense `split` is `exact` and the share amounts do not add up to the expense `amount`, including a share above the amount (field `split`). Checked only when `amount` is a valid positive amount and the shape of `split` is valid |
+| `validation.groupCurrencyLocked` | `PUT /v1/groups/{id}`: the main currency of a group that has an expense or a repayment, deleted ones included, cannot change (field `currency`). Sending the same currency is fine |
+| `validation.tooManyCategories` | `POST /v1/groups/{id}/categories`: the group already has 100 categories of its own (field `name`), checked only after `categoryNameTaken` |
 
 ### Other error codes
 
@@ -615,7 +827,7 @@ Every error is an RFC 9457 `application/problem+json` document:
 | 409 | `goal.concurrentUpdate` | `POST /v1/goals/{id}/contributions` | the goal was linked to another account (or unlinked) by another request while the contribution was processed. Nothing is written. Reload the goal and retry |
 | 429 | title "Too many requests" | `/v1/auth/*` and `DELETE /v1/me` | rate limit exceeded. The `Retry-After` header holds the wait in seconds. On refresh it does not mean the session ended: wait and retry |
 | 500 | title "Server error" | any | unexpected failure. Report the `correlationId` |
-| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `GET /v1/debts`, `POST /v1/debts`, `PUT /v1/debts/{id}`, `POST /v1/debts/{id}/repayments`, `DELETE /v1/categories/{id}`, `GET /v1/overview` | a conversion that needs an exchange rate that is not stored yet, or whose newest stored rate is older than 30 days (see Rates): a cross-currency transfer, transaction, contribution, debt with an account or repayment without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies, a repayment into or out of an account in a third currency the rate between the repayment and account currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions, contributions, debts and repayments can also send a manual `rate` (only for the entered-to-account conversion of a transaction, a contribution or a debt and for the repayment-to-debt conversion of a repayment, never for the account-to-base one or for a repayment's account in a third currency). A stale rate is refused only on the automatic conversions of transfers, transactions, contributions, debts and repayments. The base currency change and every read value stored data with the latest stored rate whatever its age. On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500. On `GET /v1/overview` it is returned when the balance, a budget, a goal or an open debt needs a rate that is not stored. On `GET /v1/debts` it is returned when an open debt needs a rate that was never stored, whatever the `status` filter, because every page carries the summary (see Debts) |
+| 503 | `rates.unavailable` (title "Service Unavailable") | `POST /v1/transfers`, `POST`/`PUT /v1/transactions`, `PUT /v1/settings`, `GET /v1/budgets`, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `GET /v1/goals`, `PUT /v1/goals/{id}`, `POST /v1/goals/{id}/contributions`, `GET /v1/debts`, `POST /v1/debts`, `PUT /v1/debts/{id}`, `POST /v1/debts/{id}/repayments`, `POST /v1/groups/{id}/expenses`, `PUT /v1/groups/{id}/expenses/{expenseId}`, `POST /v1/groups/{id}/repayments`, `PUT /v1/groups/{id}/repayments/{repaymentId}`, `GET /v1/groups/{id}/balances` with a `currency` other than the main currency of the group, `DELETE /v1/categories/{id}`, `GET /v1/overview` | a conversion that needs an exchange rate that is not stored yet, or whose newest stored rate is older than 30 days (see Rates): a cross-currency transfer, transaction, contribution, debt with an account, repayment, group expense or group repayment without a manual `rate` (a transaction may also need the rate between the account and base currencies, a contribution the rate between the linked account and base currencies, a repayment into or out of an account in a third currency the rate between the repayment and account currencies), or a base currency change while some currency used by a transaction, budget, goal or contribution has no stored rate at all. Nothing is written. Retry later; transfers, transactions, contributions, debts, repayments, group expenses and group repayments can also send a manual `rate` (only for the entered-to-account conversion of a transaction, a contribution or a debt, for the repayment-to-debt conversion of a repayment and for the conversion into the main currency of a group entry, never for the account-to-base one or for a repayment's account in a third currency). A stale rate is refused only on the automatic conversions of transfers, transactions, contributions, debts, repayments and group entries. The base currency change and every read value stored data with the latest stored rate whatever its age. On the budget and goal reads, `POST /v1/budgets`, `PUT /v1/budgets/{id}`, `PUT /v1/goals/{id}` and `DELETE /v1/categories/{id}` (a budget merge that needs a rate) the case cannot happen once the settings check passed and is kept so that it never becomes a 500. On `GET /v1/overview` it is returned when the balance, a budget, a goal or an open debt needs a rate that is not stored. On `GET /v1/debts` it is returned when an open debt needs a rate that was never stored, whatever the `status` filter, because every page carries the summary (see Debts). On a group expense or group repayment write it is returned when the entry currency differs from the main currency of the group and no stored rate of the entry `date` is usable for the entry currency or the main currency, after the member and category references passed (see Expense groups). On `GET /v1/groups/{id}/balances?currency=X` it is returned when X or the main currency of the group has no stored rate at all, also for a group without entries: a read uses the latest stored rate whatever its age |
 
 ### Rate limiting and lockout
 
@@ -675,8 +887,8 @@ Currencies and conversion:
 - `GET /v1/rates` returns a plain array, not a `Page`. This is the one exception to "every collection is paginated": there are at most 147 pairs.
 - `date`, `from` and `to` are optional, except that at least one of `from` and `to` is required: without both the answer is 400 `to: ["validation.required"]`. An omitted `date` means today's UTC date, and every `Rate` echoes the requested or resolved date in `date`. With only `from` the array holds that currency against every other one, with only `to` every other currency against it, and with both at most one pair. A pair with `from == to` is never returned.
 - For a date, the rate of each currency is the latest stored one on or before that date. For weekends, holidays and future dates that is the latest earlier rate, and for a date before the history start it is the earliest stored rate of that currency. Table B is weekly, so on any day of the week a table B currency reads the rate of its latest publication on or before that day. Cross rates go through PLN and are rounded by the rate rounding rule.
-- A rate older than 30 days counts as missing when it is used by `GET /v1/rates` and by the automatic conversions of writes (transfers, transactions, goal contributions, debts with an account and repayments without a manual rate, the conversion of a repayment into an account in a third currency, and every account-to-base conversion). The age is measured against `min(date, today)`: a rate dated more than 30 days before that day is stale, and one dated exactly 30 days before is not. The earliest-rate fallback for a date before the history start is never stale. A currency that NBP stopped publishing therefore leaves `GET /v1/rates` and answers 503 `rates.unavailable` on automatic conversions once its last rate is older than 30 days, while a manual `rate` still works for the entered-to-account step.
-- The staleness rule never applies to reads that value stored data: the overview balance, budgets, goals, the debt summary (`summary` of `GET /v1/debts` and `Overview.debts`), the base currency change, copying budgets and moving budgets when a category is deleted use the latest stored rate whatever its age, so a delisted currency never breaks a read.
+- A rate older than 30 days counts as missing when it is used by `GET /v1/rates` and by the automatic conversions of writes (transfers, transactions, goal contributions, debts with an account and repayments without a manual rate, the conversion of a repayment into an account in a third currency, every account-to-base conversion, and group expenses and group repayments in another currency than the main currency of the group without a manual rate). The age is measured against `min(date, today)`: a rate dated more than 30 days before that day is stale, and one dated exactly 30 days before is not. The earliest-rate fallback for a date before the history start is never stale. A currency that NBP stopped publishing therefore leaves `GET /v1/rates` and answers 503 `rates.unavailable` on automatic conversions once its last rate is older than 30 days, while a manual `rate` still works for the entered-to-account step.
+- The staleness rule never applies to reads that value stored data: the overview balance, budgets, goals, the debt summary (`summary` of `GET /v1/debts` and `Overview.debts`), the base currency change, copying budgets, moving budgets when a category is deleted and the group balances shown in another currency use the latest stored rate whatever its age, so a delisted currency never breaks a read.
 - Pairs where a currency has no usable rate (not stored, or stale) are omitted, so the array can be empty right after the first start.
 - Today's rates are cached for up to an hour, are the same for every user, and the sync invalidates them; any other date is read from the database on every request.
 
@@ -814,6 +1026,89 @@ A debt is money the user lent to or borrowed from a person. Debts are private: e
 
 - `Overview.balance` counts what lies on the accounts, including the legs of debts and repayments, but not the amounts still owed. A client that shows the balance with debts computes `balance.amount + debts.owedToMe - debts.owedByMe`.
 - Debts, repayments and their account legs are not transactions. Reports, budgets, `Overview.income`, `Overview.expense`, `transactionCount`, `spending`, `recent` and `hasTransactions` never see them, so lending, borrowing or repaying never shows up as income or expense. They change only `Account.balance` (and so `Overview.balance`), `inUse` of the account and `Overview.debts`.
+
+## Expense groups
+
+A group shares spending between named people: members are plain names, not users. Expenses are paid by one member and split between members, repayments move money from one member to another, and the balances say who owes whom. In this release only the user who created a group (its owner) reads or changes it: every group route needs a valid access token, and a group of another user, an unknown group and an entry id that belongs to another group all answer exactly like an unknown id (404). `DELETE /v1/me` deletes the groups of the user with everything in them.
+
+The validation rules above apply: the first failing rule per field, all failing fields in one 400, a whitespace-only string counts as missing. Ids in paths must be GUIDs, any other value answers 404. Groups are never cached, and "today" is the UTC date of the server. Groups never touch accounts, budgets, reports or the overview: a group entry is not a transaction, moves no money on any account, and `Account.balance`, `inUse`, `Overview` and `Report` never see it. No endpoint creates a transaction or a debt from a group.
+
+### Order of checks
+
+A group write is checked in this order, and the first stage that fails answers alone:
+
+1. The shape of the request (400, `validation.*` codes under the field names): types, ranges, lengths and the rules of each field. It runs before any lookup, so an invalid body sent to an unknown or foreign group, or to an unknown entry, answers 400 and only a valid body gives 404. Invalid `page`, `pageSize`, `deleted` and `currency` queries are part of this stage too.
+2. The group (404), then the entry for `PUT`, `DELETE` and `restore` (404).
+3. The references (400): the member and category ids that the body names must belong to this group. Every failing reference is reported together in one 400 (`payerId`, `categoryId`, `split`, `fromMemberId`, `toMemberId`), before any rate is looked at.
+4. The rate (503 `rates.unavailable`), then the converted amount (400 under `rate`: `validation.positiveAmount` or `validation.invalidValue`). Nothing is written when any stage fails.
+
+### Groups and members
+
+- `GET /v1/groups` lists the groups of the user, newest created first (creation time, then `id`, both descending). `pageSize` defaults to 100 (maximum 100). `members` is the number of members and `total` the sum of `groupAmount` over the live expenses. `GET /v1/groups/{id}` answers the full `Group`.
+- `POST /v1/groups` takes the `name`, the main `currency` and 1 to 50 member names, and answers 201 with the `Group` and `Location: /v1/groups/{id}`. Group names are not unique. Member positions follow the order of the `members` array. The first failing rule answers for `members`, in this order: missing, null, blank or an empty array (`validation.required`); not an array, or an element that is not a string, is blank or contains a control character (`validation.invalidValue`); a name longer than 40 characters (`validation.nameTooLong`); more than 50 names (`validation.tooManyMembers`); two equal names (`validation.memberNameTaken`).
+- A member name is 1 to 40 characters after trimming with no control characters, and is stored trimmed. Names are unique per group, compared case-insensitively (`validation.memberNameTaken`), and a group has at most 50 members (`validation.tooManyMembers`). `POST /v1/groups/{id}/members` checks the name before the count: a name that is already taken answers `memberNameTaken` even when the group is full, and only a free name in a full group answers `tooManyMembers` (both under `name`). It adds a member at the end of the member order and answers 201 with the `GroupMember`, no `Location` header, `inUse` false. The member order never changes afterwards.
+- `PUT /v1/groups/{id}/members/{memberId}` renames a member (200). Changing only the case of the member's own name is allowed. Past entries refer to the member by id, so they show the new name.
+- A member is "in use" (`inUse`) when any history event of the group names it: as its actor, or in the state it records (`payerId`, a `memberId` of `shares`, `fromMemberId` or `toMemberId`). Every create, edit, delete and restore records the full state of its entry, so this covers the payer, the shares and both sides of every expense and repayment, deleted entries included, and every earlier state too: a member that an edit took out of an entry stays in use, so the history keeps its name and an earlier state can always be applied again. A member in use can be renamed but not removed: `DELETE /v1/groups/{id}/members/{memberId}` answers 400 `memberId: ["validation.memberInUse"]` and an unused member answers 204. Removing the last unused member leaves a group without members, in which no entry can be written until a member is added. An unknown member, or a member of another group, answers 404.
+- Adding or removing members never changes a past entry: shares are stored per member, so every balance stays as it was. A member added later takes part only in the entries written after it, unless an old entry is edited without `split` (see Expenses).
+- `PUT /v1/groups/{id}` replaces `name` and `currency` and answers 200 with the `Group`. `DELETE /v1/groups/{id}` answers 204 and removes the group with its members, categories, expenses, repayments and history.
+- The main currency is any of the 148 currencies and every entry is converted into it. It can change only while the group has no expense and no repayment, deleted ones included (`currency: ["validation.groupCurrencyLocked"]`), and `currencyLocked` tells the client whether it can. Sending the group's own currency is always accepted.
+
+### Categories
+
+- A group offers the 9 standard categories, listed first in this order: `groceries`, `transport`, `housing`, `cafes`, `health`, `shopping`, `leisure`, `gifts`, `other`. They are the expense starter categories without `transfer`. Their `id` is the key, `standard` is true and `name` is `null`: the client translates the key. The group's own categories follow in creation order.
+- `POST /v1/groups/{id}/categories` adds a category of the group and answers 201 with the `GroupCategory` (its `id` is a GUID string, `standard` false), no `Location` header. The name is 1 to 40 characters after trimming with no control characters, unique per group case-insensitively and different from the name of every standard category in en, pl, ru and uk, compared the same way (`validation.categoryNameTaken`). A group has at most 100 categories of its own (`validation.tooManyCategories`). The name is checked before the count: a name that is already taken (or is a standard name) answers `categoryNameTaken` even when the group already has 100 categories of its own, and only a free name answers `tooManyCategories` (both under `name`). Categories of a group cannot be renamed or deleted in this release.
+- An expense stores a standard key or the id of a category of its group, nothing else. Category keys are case-sensitive.
+
+### Expenses
+
+- `payerId` is a member, `amount` an integer in minor units of `currency` (1 to 100000000000), and `date` a real date at most one year after today (UTC) with no lower bound. A `payerId` that is not a GUID answers `validation.unknownMember`, as does a GUID that is not a member of the group.
+- `categoryId` is optional: missing, null or blank means `other`. Any other value is a standard key or a GUID: a value that is neither answers `validation.unknownCategory` with the shape of the body, and a GUID that is not a category of this group answers it after the group lookup.
+- `tags` follow the rules of transaction tags: names of 1 to 30 characters after trimming with no control characters, at most 10 distinct (case-insensitively). Names are stored trimmed, a repeat in another case is dropped, and the first spelling is kept. There are no shared tag records: a group expense stores plain names, and they are not listed by `GET /v1/tags`.
+- `description` is optional, stored trimmed, `null` when blank, at most 100 characters (`validation.titleTooLong`).
+- `POST` answers 201 with the `GroupExpense` and no `Location` header. `PUT` replaces every field, so what the body leaves out takes its default again: no `categoryId` means `other`, no `tags` no tags, no `description` none, no `split` an equal split between every member the group has now, and no `rate` a fresh conversion (see Conversion). `createdBy` and `createdAt` never change. A deleted expense cannot be edited: it answers 404 until it is restored.
+- `GET /v1/groups/{id}/expenses` answers a `Page<GroupExpense>` of the live expenses, or of the deleted ones with `deleted=true`. `deleted` is `true` or `false`, case-sensitive: missing means `false` and anything else answers 400 `deleted: ["validation.invalidValue"]`.
+
+### Split and rounding
+
+- Without `split` (missing or null) the expense is split equally between every current member. `{ mode: 'equal', memberIds }` splits it equally between those members. `{ mode: 'exact', shares: [{ memberId, amount }] }` gives each listed member an exact amount in the expense currency, each from 1 to `amount`, adding up to `amount` (`split: ["validation.splitMismatch"]`: also for a share above `amount`). The order of `memberIds` and `shares` does not matter, and `GroupExpense.shares` and `GroupExpenseState.shares` always list the members that share in member order. `split` on the expense is the mode that was used (`equal` also for a missing `split`).
+- A `split` that is present and not null must be an object, so a blank string, a number or an array is `split: ["validation.invalidValue"]`, as is an unknown `mode`, a missing, empty or longer than 50 `memberIds` or `shares` array, a repeated member and an exact share that is not an object or has no integer `amount` from 1 to 100000000000. A repeated member is detected on the GUID where the value is one (so the same id in another letter case or with surrounding spaces is a repeat), on the trimmed text of any other string, and on the JSON text together with the kind of any other value (so `42` and `42` are a repeat, while `42` and `"42"` are not), and a missing or null `memberId` is never compared with another. A member id that is not a GUID (a non-string, or an exact share without `memberId`) is `split: ["validation.unknownMember"]`, and so is a GUID that is not a member of the group. Shape errors win over member errors: every shape check (types, amounts, count, repeated members) finishes before any `unknownMember`, so a split with an invalid share amount and an unknown member, or one that repeats a member and also holds a value that is not a GUID (`memberIds: [A, A, 42]`), answers `invalidValue`. `splitMismatch` is checked only when the shape is valid and `amount` is a valid positive amount.
+- Rounding uses the largest remainder method, so the shares always add up exactly. An equal split allocates `amount` between the members with weight 1 each. The `groupAmount` of the expense is then allocated between the members in proportion to their share `amount`s, and the shares of an exact split are allocated the same way. A remainder minor unit goes first to the member with the largest remainder, ties go to the payer when the payer shares, then to the sharing members in member order. For example 10001 split between Anna, Olya and Max, paid by Max, gives Max 3334, Anna 3334 and Olya 3333. The shares of an expense add up to its `amount` and to its `groupAmount`, and a share can have a `groupAmount` of 0.
+- An equal split never stores a share of 0: when `amount` is smaller than the number of members it is split between, the members whose share rounds to 0 minor units of the expense currency get no share at all, and `shares` lists only the members that got at least 1 (still in member order). The remainder rule above decides who keeps a unit, the payer first (when the payer is among the members), then the members in member order, and the `groupAmount` is allocated between the members that remain. For example 2 JPY split equally between Anna, Olya and Max, paid by Olya, gives Olya 1 and Anna 1 and Max no share, and 1 JPY split between the same members, paid by Olya, gives Olya the only share. So `GroupShare.amount` is always 1 or more, and an expense (`201`, never an error) can have fewer shares than the members its `split` names. An exact split is unchanged: each listed member gets the stated amount, from 1 to `amount`.
+
+### Conversion
+
+- Every expense and repayment is converted into the main currency of the group when it is written, and the result is stored with it. `rate` is the rate from the entry currency to the main currency per major unit, as in Accounts, transfers and rates. `groupAmount` is `amount` converted with the formula of that section, half away from zero to a whole minor unit of the main currency.
+- For the main currency itself `rate` is 1, `rateManual` false and `groupAmount` equals `amount`: a sent `rate` is validated (a JSON number, `0 < rate <= 1000000000`, a blank string counts as missing) and then ignored. In any other currency the manual `rate`, rounded by the rate rounding rule, is used when sent and `rateManual` is true. Without a manual `rate` the rate is the stored one of the entry `date` (the latest on or before it, crossed through PLN, rounded by the rate rounding rule) under the 30-day staleness limit of writes, and `rateManual` is false. When that rate is missing or stale the answer is 503 `rates.unavailable` and nothing is written.
+- A `groupAmount` that rounds to 0 answers `rate: ["validation.positiveAmount"]`, and one above 100000000000 minor units `rate: ["validation.invalidValue"]`.
+- An entry stores its `rate`, `rateManual` and `groupAmount`, and they never change when exchange rates change later. Only an edit prices the entry again. `PUT` without `rate` always prices it at the rate of its `date` (503 when that rate is stale), even when the stored rate was manual. A client that wants to keep a manual rate sends it back: the web client resends `rate` only when `rateManual` is true, so an edit of an automatically priced entry follows the rates again. Delete and restore never price anything: a restored entry comes back exactly as it was, even when its rate would be stale today.
+
+### Repayments
+
+- A repayment moves `amount` from member `fromMemberId` to member `toMemberId`: the sender's balance goes up and the receiver's down, as if the sender had paid it. They must be different members of the group (`toMemberId: ["validation.sameMember"]`, checked when both are GUIDs). A member that is not a GUID or not a member of the group answers `validation.unknownMember` under its field, and both fields are reported together.
+- `amount`, `currency`, `date`, `rate` and the conversion follow the rules of expenses, with `groupAmount` as the converted amount. `note` is optional, stored trimmed, `null` when blank, at most 200 characters (`validation.noteTooLong`).
+- Any positive amount is accepted. A partial repayment is normal, and a repayment above what is owed is not refused: it turns the balance around, and shows in the balances and in the history. Repayments are not linked to expenses.
+- `POST` answers 201 with the `GroupRepayment` and no `Location` header, `PUT` replaces every field (200, a missing `rate` prices again at the date's rate) and a deleted repayment cannot be edited (404). `GET /v1/groups/{id}/repayments` lists the live repayments, or the deleted ones with `deleted=true`, as a `Page<GroupRepayment>`.
+
+### Delete, restore, history and actors
+
+- `DELETE` of an expense or a repayment is soft and answers 204: the entry leaves the balances and the `total`, is listed with `deleted=true` and keeps every field. `POST .../restore` answers 200 with the entry exactly as it was, and puts it back into the balances. A deleted entry cannot be edited, so edit it after restoring it. Deleting a deleted entry, restoring a live one, and any id that is not an entry of this group answer 404. Entries are removed for good only together with their group.
+- Every create, edit, delete and restore appends one event to the history of the entry: its `action`, the time `at`, the `actor` and the `state` of the entry right after the action (`GroupExpenseState` or `GroupRepaymentState`, the full state and not a difference: the client compares consecutive states). `GET .../history` answers a `Page<GroupEntryEvent<...>>`, newest first (`at`, then `id`, both descending), `pageSize` defaults to 100 (maximum 100). The history of a deleted entry stays readable, and an entry that does not belong to the group answers 404.
+- `createdBy` and `createdAt` come from the first event of the entry. `updatedBy` and `updatedAt` come from the newest event after the first one, whatever its action (an edit, a delete or a restore), and are `null` for an entry that was never changed.
+- A `GroupActor` is `{ kind: 'owner', memberId: null, name }` in this release, with the current name of the owner. `kind: 'member'` (a member's name and id) is reserved for later releases, and clients should show the `name` of either.
+- There is no optimistic concurrency token. When two edits of one entry arrive at the same moment they are applied one after the other, the later one wins, and the earlier state stays in the history, where it can be applied again by editing the entry with it (the members it names stay in the group: see Groups and members).
+
+### Balances and suggested transfers
+
+- `GET /v1/groups/{id}/balances` is read-only and covers the live entries only. For every member, in member order and in the main currency of the group, `paid` is the `groupAmount` of the live expenses the member paid, `share` the member's `groupAmount` shares of the live expenses, `sent` and `received` the `groupAmount` of the live repayments the member sent and received, and `balance` is `paid - share + sent - received`: positive means the others owe the member, negative that the member owes. `total` is the sum of `groupAmount` over the live expenses. The balances of all members add up to exactly 0, and the `paid` column and the `share` column each add up to `total`. A group without entries gets zeros for every member, `transfers: []` and `total` 0.
+- `transfers` are the suggested transfers that settle everyone: there is no list of who owes whom per pair. They are computed from the balances in the main currency. First every member with a negative balance, in member order, pays the first member whose balance is exactly the opposite. Then, repeatedly, the member with the largest debt pays the member with the largest credit the smaller of the two amounts, ties going to the earlier member. A transfer is listed in the order it was found. The list has at most one transfer fewer than the members with a non-zero balance and is empty when every balance is 0; in rare cases it has one transfer more than the theoretical minimum. For balances Anna +4232, Olya -698, Max -1767 and Kasia -1767 the transfers are Max to Anna 1767, Kasia to Anna 1767 and Olya to Anna 698.
+- Without `currency` the figures are in the main currency (`currency` equals `groupCurrency`). `currency` is any of the 148 codes and shows every figure in it: `paid`, `share`, `sent`, `received`, `balance`, `total` and every transfer `amount` are converted separately from the main currency at today's (UTC) latest stored rate whatever its age (a read, so the 30-day limit does not apply), with the formula of Accounts, transfers and rates (the cross rate through PLN, rounded by the rate rounding rule) and half away from zero. The transfers are chosen in the main currency first and converted afterwards, so the converted figures can miss a zero sum, and a converted `balance` can differ from `paid - share + sent - received` of the converted figures, by a few minor units. With EUR at 4.30 PLN a balance of 4232 cents shows as 18198 grosze. The main currency itself as `currency` converts nothing.
+- When the view currency or the main currency has no stored rate at all, the answer is 503 `rates.unavailable`, also for a group without entries. An invalid `currency` (`eur`, ` EUR`, `XDR`, or an empty value) answers 400 `currency: ["validation.invalidValue"]` before the group is looked up, and a group of another user answers 404. The figures are read in one consistent snapshot.
+
+### Ordering and paging
+
+- Every list is a `Page<T>`: `page` is 1-based, `pageSize` defaults to 100 and is at most 100 on every group list, and `total` counts the rows of the list (the live or the deleted ones, as the `deleted` flag says). An invalid `page` or `pageSize` answers 400 `invalidValue` under the parameter name, before the lookup.
+- Groups: newest created first (creation time, then `id`, both descending). Expenses and repayments: `date`, then creation time, then `id`, all descending. Editing an entry keeps its creation time, so an edit moves it in the list only when its `date` changes. History: newest event first (`at`, then `id`, both descending).
+- Members are in member order (the order of creation, new members last) in `Group.members`, `GroupExpense.shares`, `GroupBalances.members` and everywhere a list of members is shown, and the categories are in the order of `Group.categories`. A group holds at most 50 members and 109 categories (the 9 standard ones and 100 of its own). Both lists are embedded in `Group`, not paginated, and neither is `GroupBalances`, whose `transfers` are fewer than its members: this is an exception to "every collection is paginated", as for rates.
 
 ## Overview and reports
 
