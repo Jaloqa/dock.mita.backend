@@ -239,6 +239,7 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}/restore", out var restoreRepayment).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}/history", out var repaymentHistory).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/balances", out var balances).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/membership", out var membership).ShouldBeTrue();
 
         TagOf(groups.GetProperty("get")).ShouldBe("Groups");
         TagOf(groups.GetProperty("post")).ShouldBe("Groups");
@@ -276,6 +277,36 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         ParameterNames(repaymentHistory.GetProperty("get")).ShouldContain("pageSize");
         TagOf(balances.GetProperty("get")).ShouldBe("Groups");
         ParameterNames(balances.GetProperty("get")).ShouldContain("currency");
+        MethodsOf(membership).ShouldBe(["delete"]);
+        TagOf(membership.GetProperty("delete")).ShouldBe("Groups");
+    }
+
+    [Fact]
+    public async Task Should_DescribeGroupInvites()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/group-invites", out var invites).ShouldBeTrue();
+        paths.TryGetProperty("/v1/group-invites/{memberId}/accept", out var accept).ShouldBeTrue();
+        paths.TryGetProperty("/v1/group-invites/{memberId}/decline", out var decline).ShouldBeTrue();
+
+        MethodsOf(invites).ShouldBe(["get"]);
+        MethodsOf(accept).ShouldBe(["post"]);
+        MethodsOf(decline).ShouldBe(["post"]);
+        TagOf(invites.GetProperty("get")).ShouldBe("Group invites");
+        TagOf(accept.GetProperty("post")).ShouldBe("Group invites");
+        TagOf(decline.GetProperty("post")).ShouldBe("Group invites");
+        ParameterNames(invites.GetProperty("get")).ShouldContain("pageSize");
+        ParameterNames(accept.GetProperty("post")).ShouldContain("memberId");
+        ParameterNames(decline.GetProperty("post")).ShouldContain("memberId");
+        invites.GetProperty("get").GetProperty("security").GetArrayLength().ShouldBe(2);
+        accept.GetProperty("post").GetProperty("security").GetArrayLength().ShouldBe(2);
+        decline.GetProperty("post").GetProperty("security").GetArrayLength().ShouldBe(2);
     }
 
     [Fact]
@@ -283,9 +314,11 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
     {
         const string prefix = "/v1/shared/groups/{token}";
         string[] methods = ["get", "put", "post", "delete", "patch", "head", "options", "trace"];
+        string[] signedIn = ["/membership"];
         var operations = new Dictionary<string, string[]>
         {
             [""] = ["get"],
+            ["/membership"] = ["put"],
             ["/balances"] = ["get"],
             ["/categories"] = ["post"],
             ["/expenses"] = ["get", "post"],
@@ -321,7 +354,15 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
                 var operation = item.GetProperty(method);
                 var name = $"{method} {prefix}{suffix}";
                 TagOf(operation).ShouldBe("Shared groups", name);
-                operation.TryGetProperty("security", out _).ShouldBeFalse(name);
+                if (signedIn.Contains(suffix))
+                {
+                    operation.GetProperty("security").GetArrayLength().ShouldBe(2, name);
+                }
+                else
+                {
+                    operation.TryGetProperty("security", out _).ShouldBeFalse(name);
+                }
+
                 var parameters = operation.GetProperty("parameters").EnumerateArray().ToList();
                 parameters
                     .Where(parameter => parameter.GetProperty("in").GetString() == "path")
@@ -366,6 +407,13 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
 
     private static string? TagOf(JsonElement operation) =>
         operation.GetProperty("tags")[0].GetString();
+
+    private static string[] MethodsOf(JsonElement pathItem) =>
+    [
+        .. pathItem.EnumerateObject()
+            .Select(property => property.Name)
+            .Where(name => name is "get" or "put" or "post" or "delete" or "patch" or "head" or "options" or "trace")
+    ];
 
     [Fact]
     public async Task Should_NotServeScalar_OutsideDevelopment()

@@ -24,6 +24,13 @@ public static class GroupQueries
                 WHERE entry_event."GroupId" = {groupId} AND named.member_id IS NOT NULL
                 """));
 
+    public static Task<GroupMember?> MemberOfGroupAsync(
+        this AppDbContext db,
+        Guid groupId,
+        Guid memberId,
+        CancellationToken ct) =>
+        db.GroupMembers.SingleOrDefaultAsync(member => member.Id == memberId && member.GroupId == groupId, ct);
+
     public static async Task<bool> IsCurrencyLockedAsync(this AppDbContext db, Guid groupId, CancellationToken ct) =>
         await db.GroupExpenses.AnyAsync(expense => expense.GroupId == groupId, ct)
         || await db.GroupRepayments.AnyAsync(repayment => repayment.GroupId == groupId, ct);

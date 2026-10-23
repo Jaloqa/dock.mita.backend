@@ -7,20 +7,46 @@ namespace Mita.Api.Authentication;
 public sealed class GroupLinkAuthorizationResultHandler(AuthorizationMiddlewareResultHandler fallback)
     : IAuthorizationMiddlewareResultHandler
 {
-    public Task HandleAsync(
+    public async Task HandleAsync(
         RequestDelegate next,
         HttpContext context,
         AuthorizationPolicy policy,
-        PolicyAuthorizationResult authorizeResult) =>
-        RefusesLink(policy, authorizeResult)
-            ? ProblemDetailsWriter.WriteStatusAsync(context, StatusCodes.Status404NotFound)
-            : fallback.HandleAsync(next, context, policy, authorizeResult);
+        PolicyAuthorizationResult authorizeResult)
+    {
+        if (await RefusesLinkAsync(context, policy, authorizeResult))
+        {
+            await ProblemDetailsWriter.WriteStatusAsync(context, StatusCodes.Status404NotFound);
+            return;
+        }
 
-    // The policy evaluator challenges an anonymous caller without any failure details, so only a policy made of
-    // link requirements alone answers 404 then; a policy that also needs a signed-in user keeps its 401.
-    private static bool RefusesLink(AuthorizationPolicy policy, PolicyAuthorizationResult result) =>
-        (result.Challenged || result.Forbidden)
-        && (result.AuthorizationFailure is { } failure
-            ? failure.FailedRequirements.OfType<GroupLinkRequirement>().Any()
-            : policy.Requirements.All(requirement => requirement is GroupLinkRequirement));
+        await fallback.HandleAsync(next, context, policy, authorizeResult);
+    }
+
+    // The policy evaluator challenges an anonymous caller without any failure details. A policy made of link
+    // requirements alone failed on the link then; a policy that also needs a signed-in user checks the link again on
+    // its own, so an unknown link answers 404 before a missing session answers 401.
+    private static async Task<bool> RefusesLinkAsync(
+        HttpContext context,
+        AuthorizationPolicy policy,
+        PolicyAuthorizationResult result)
+    {
+        if (!(result.Challenged || result.Forbidden) || !policy.Requirements.OfType<GroupLinkRequirement>().Any())
+        {
+            return false;
+        }
+
+        if (result.AuthorizationFailure is { } failure)
+        {
+            return failure.FailedRequirements.OfType<GroupLinkRequirement>().Any();
+        }
+
+        if (policy.Requirements.All(requirement => requirement is GroupLinkRequirement))
+        {
+            return true;
+        }
+
+        var authorization = context.RequestServices.GetRequiredService<IAuthorizationService>();
+        var link = await authorization.AuthorizeAsync(context.User, context, new GroupLinkRequirement());
+        return !link.Succeeded;
+    }
 }

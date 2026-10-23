@@ -291,7 +291,7 @@ public static class TestData
         ChangeMemberAsync(
             factory,
             member,
-            (stored, clock) => stored.Invite(email.Trim().ToLowerInvariant(), clock.GetUtcNow()));
+            (stored, clock) => stored.Invite(GroupInviteEmails.Normalize(email), clock.GetUtcNow()));
 
     public static async Task<GroupExpense> AddGroupExpenseAsync(
         WebApplicationFactory<Program> factory,

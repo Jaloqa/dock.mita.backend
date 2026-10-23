@@ -19,9 +19,7 @@ public sealed class RemoveMemberHandler(AppDbContext db, GroupAccess access)
             return Error.NotFound();
         }
 
-        var member = await db.GroupMembers.SingleOrDefaultAsync(
-            candidate => candidate.Id == command.MemberId && candidate.GroupId == context.GroupId,
-            cancellationToken);
+        var member = await db.MemberOfGroupAsync(context.GroupId, command.MemberId, cancellationToken);
         if (member is null)
         {
             return Error.NotFound();
