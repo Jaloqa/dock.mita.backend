@@ -1,3 +1,5 @@
+using Mita.Api.Common.Debts;
+
 namespace Mita.Api.Features.Overview.GetOverview;
 
 public sealed record OverviewResponse(
@@ -8,6 +10,7 @@ public sealed record OverviewResponse(
     string PreviousTo,
     string Currency,
     OverviewBalanceResponse Balance,
+    DebtSummaryDto Debts,
     OverviewTotalResponse Income,
     OverviewTotalResponse Expense,
     long? AverageExpense,

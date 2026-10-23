@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Mita.Api.IntegrationTests.Infrastructure;
 using Mita.Domain.Accounts;
 using Mita.Domain.Categories;
+using Mita.Domain.Debts;
 using Mita.Domain.Money;
 using Mita.Domain.Periods;
 using Mita.Domain.Users;
@@ -61,12 +62,15 @@ public sealed class OverviewTests(MitaApiFactory factory) : IClassFixture<MitaAp
 
         Names(overview).ShouldBe(
             [
-                "range", "from", "to", "previousFrom", "previousTo", "currency", "balance", "income", "expense",
-                "averageExpense", "transactionCount", "spending", "month", "topBudgets", "recent", "goals",
+                "range", "from", "to", "previousFrom", "previousTo", "currency", "balance", "debts", "income",
+                "expense", "averageExpense", "transactionCount", "spending", "month", "topBudgets", "recent", "goals",
                 "goalCount", "hasTransactions"
             ],
             ignoreOrder: true);
         Names(overview.GetProperty("balance")).ShouldBe(["amount", "accounts"], ignoreOrder: true);
+        Names(overview.GetProperty("debts")).ShouldBe(
+            ["owedToMe", "owedByMe", "open", "overdue"],
+            ignoreOrder: true);
         Names(overview.GetProperty("income")).ShouldBe(["amount", "count", "change"], ignoreOrder: true);
         Names(overview.GetProperty("expense")).ShouldBe(["amount", "count", "change"], ignoreOrder: true);
         Names(overview.GetProperty("spending")[0]).ShouldBe(["categoryId", "name", "amount", "percent"], ignoreOrder: true);
@@ -394,6 +398,113 @@ public sealed class OverviewTests(MitaApiFactory factory) : IClassFixture<MitaAp
     }
 
     [Fact]
+    public async Task Should_SummarizeDebts()
+    {
+        var today = Today;
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.EUR, Iso(today), 4.30m));
+        using var owner = new AuthClient(isolated);
+        using var neighbour = new AuthClient(isolated);
+        using var fresh = new AuthClient(isolated);
+        await owner.RegisterNewAsync(Ct);
+        await neighbour.RegisterNewAsync(Ct);
+        await fresh.RegisterNewAsync(Ct);
+        var ownerId = await UserIdAsync(owner);
+        var neighbourId = await UserIdAsync(neighbour);
+        var start = Iso(today.AddDays(-10));
+        await TestData.AddDebtAsync(
+            isolated, ownerId, DebtDirection.Lent, 40_000, date: start, dueDate: Iso(today.AddDays(5)));
+        await TestData.AddDebtAsync(isolated, ownerId, DebtDirection.Lent, 5_000, Currency.EUR, date: start);
+        await TestData.AddDebtAsync(
+            isolated, ownerId, DebtDirection.Borrowed, 150_000, date: start, dueDate: Iso(today.AddDays(-1)));
+        var settled = await TestData.AddDebtAsync(isolated, ownerId, DebtDirection.Lent, 12_000, date: start);
+        await TestData.AddRepaymentAsync(isolated, settled, 12_000, date: Iso(today));
+        await TestData.AddDebtAsync(isolated, neighbourId, DebtDirection.Lent, 9_000, date: start, dueDate: Iso(today.AddDays(-3)));
+        await TestData.AddDebtAsync(isolated, neighbourId, DebtDirection.Borrowed, 1_000, date: start);
+
+        var own = await GetOverviewAsync(owner, string.Empty);
+        var empty = await GetOverviewAsync(fresh, string.Empty);
+
+        Debts(own).ShouldBe((61_500L, 150_000L, 3, 1));
+        Debts(empty).ShouldBe((0L, 0L, 0, 0));
+        Debts(await GetOverviewAsync(neighbour, string.Empty)).ShouldBe((9_000L, 1_000L, 2, 1));
+    }
+
+    [Fact]
+    public async Task Should_NotCountDebts_InTotals()
+    {
+        var today = Today;
+        using var client = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+        var userId = await UserIdAsync(client);
+        var lender = await TestData.AddAccountAsync(factory, userId, openingBalance: 100_000);
+        var borrower = await TestData.AddAccountAsync(factory, userId, openingBalance: 20_000);
+        var lent = await TestData.AddDebtAsync(
+            factory, userId, DebtDirection.Lent, 30_000, account: lender, date: Iso(today));
+        var borrowed = await TestData.AddDebtAsync(
+            factory, userId, DebtDirection.Borrowed, 50_000, account: borrower, date: Iso(today));
+        await TestData.AddRepaymentAsync(factory, lent, 10_000, lender, Iso(today));
+        await TestData.AddRepaymentAsync(factory, borrowed, 20_000, borrower, Iso(today));
+
+        var overview = await GetOverviewAsync(client, string.Empty);
+
+        overview.GetProperty("income").GetProperty("amount").GetInt64().ShouldBe(0);
+        overview.GetProperty("expense").GetProperty("amount").GetInt64().ShouldBe(0);
+        overview.GetProperty("transactionCount").GetInt32().ShouldBe(0);
+        overview.GetProperty("averageExpense").ValueKind.ShouldBe(JsonValueKind.Null);
+        overview.GetProperty("spending").GetArrayLength().ShouldBe(0);
+        overview.GetProperty("recent").GetArrayLength().ShouldBe(0);
+        overview.GetProperty("hasTransactions").GetBoolean().ShouldBeFalse();
+        var balances = await AccountBalancesAsync(client);
+        balances[lender.Id].ShouldBe(80_000);
+        balances[borrower.Id].ShouldBe(50_000);
+        Balance(overview).ShouldBe((balances.Values.Sum(), 2));
+        Debts(overview).ShouldBe((20_000L, 30_000L, 2, 0));
+    }
+
+    [Fact]
+    public async Task Should_RepriceDebts_When_BaseCurrencyChanges()
+    {
+        var today = Today;
+        await using var isolated = factory.WithIsolatedData();
+        await TestData.AddRatesAsync(isolated, (Currency.EUR, Iso(today), 4.30m));
+        using var client = new AuthClient(isolated);
+        await client.RegisterNewAsync(Ct);
+        var userId = await UserIdAsync(client);
+        await TestData.AddDebtAsync(isolated, userId, DebtDirection.Lent, 43_000, date: Iso(today));
+        Debts(await GetOverviewAsync(client, string.Empty)).ShouldBe((43_000L, 0L, 1, 0));
+        using (var put = await PutSettingsAsync(client, "EUR", 1))
+        {
+            put.StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
+
+        var overview = await GetOverviewAsync(client, string.Empty);
+
+        overview.GetProperty("currency").GetString().ShouldBe("EUR");
+        Debts(overview).ShouldBe((10_000L, 0L, 1, 0));
+    }
+
+    [Fact]
+    public async Task Should_Return503_When_DebtNeedsMissingRate()
+    {
+        await using var isolated = factory.WithIsolatedData();
+        using var client = new AuthClient(isolated);
+        await client.RegisterNewAsync(Ct);
+        var userId = await UserIdAsync(client);
+        var debt = await TestData.AddDebtAsync(isolated, userId, DebtDirection.Lent, 5_000, Currency.KWD, date: Iso(Today));
+
+        using var missing = await client.Http.GetAsync(OverviewPath, Ct);
+
+        missing.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        var problem = await missing.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        problem.GetProperty("code").GetString().ShouldBe("rates.unavailable");
+
+        await TestData.AddRepaymentAsync(isolated, debt, 5_000);
+
+        Debts(await GetOverviewAsync(client, string.Empty)).ShouldBe((0L, 0L, 0, 0));
+    }
+
+    [Fact]
     public async Task Should_FollowMonthStart_ForMonthAndYear()
     {
         var today = Today;
@@ -506,6 +617,26 @@ public sealed class OverviewTests(MitaApiFactory factory) : IClassFixture<MitaAp
     {
         var balance = overview.GetProperty("balance");
         return (balance.GetProperty("amount").GetInt64(), balance.GetProperty("accounts").GetInt32());
+    }
+
+    private static (long OwedToMe, long OwedByMe, int Open, int Overdue) Debts(JsonElement overview)
+    {
+        var debts = overview.GetProperty("debts");
+        return (
+            debts.GetProperty("owedToMe").GetInt64(),
+            debts.GetProperty("owedByMe").GetInt64(),
+            debts.GetProperty("open").GetInt32(),
+            debts.GetProperty("overdue").GetInt32());
+    }
+
+    private static async Task<Dictionary<Guid, long>> AccountBalancesAsync(AuthClient client)
+    {
+        using var response = await client.Http.GetAsync("/v1/accounts", Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var page = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        return page.GetProperty("items").EnumerateArray().ToDictionary(
+            item => item.GetProperty("id").GetGuid(),
+            item => item.GetProperty("balance").GetInt64());
     }
 
     private static async Task<Category> SystemCategoryAsync(
