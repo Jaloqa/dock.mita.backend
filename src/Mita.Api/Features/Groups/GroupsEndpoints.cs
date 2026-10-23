@@ -1,8 +1,12 @@
 using Mita.Api.Extensions;
+using Mita.Api.Features.Groups.AddCategory;
+using Mita.Api.Features.Groups.AddMember;
 using Mita.Api.Features.Groups.CreateGroup;
 using Mita.Api.Features.Groups.DeleteGroup;
 using Mita.Api.Features.Groups.GetGroup;
 using Mita.Api.Features.Groups.ListGroups;
+using Mita.Api.Features.Groups.RemoveMember;
+using Mita.Api.Features.Groups.RenameMember;
 using Mita.Api.Features.Groups.UpdateGroup;
 
 namespace Mita.Api.Features.Groups;
@@ -17,7 +21,11 @@ public static class GroupsEndpoints
             .MapCreateGroup()
             .MapGetGroup()
             .MapUpdateGroup()
-            .MapDeleteGroup();
+            .MapDeleteGroup()
+            .MapAddMember()
+            .MapRenameMember()
+            .MapRemoveMember()
+            .MapAddCategory();
 
         return app;
     }
