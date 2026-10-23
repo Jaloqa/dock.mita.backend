@@ -5,6 +5,7 @@ using Mita.Domain.Budgets;
 using Mita.Domain.Categories;
 using Mita.Domain.Debts;
 using Mita.Domain.Goals;
+using Mita.Domain.Groups;
 using Mita.Domain.Money;
 using Mita.Domain.Tags;
 using Mita.Domain.Transactions;
@@ -46,6 +47,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
     public DbSet<Tag> Tags => Set<Tag>();
 
     public DbSet<TransactionTag> TransactionTags => Set<TransactionTag>();
+
+    public DbSet<Group> Groups => Set<Group>();
+
+    public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
+
+    public DbSet<GroupCategory> GroupCategories => Set<GroupCategory>();
+
+    public DbSet<GroupExpense> GroupExpenses => Set<GroupExpense>();
+
+    public DbSet<GroupExpenseShare> GroupExpenseShares => Set<GroupExpenseShare>();
+
+    public DbSet<GroupRepayment> GroupRepayments => Set<GroupRepayment>();
+
+    public DbSet<GroupEntryEvent> GroupEntryEvents => Set<GroupEntryEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

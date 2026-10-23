@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,6 +8,7 @@ using Mita.Domain.Budgets;
 using Mita.Domain.Categories;
 using Mita.Domain.Debts;
 using Mita.Domain.Goals;
+using Mita.Domain.Groups;
 using Mita.Domain.Money;
 using Mita.Domain.Periods;
 using Mita.Domain.Tags;
@@ -17,6 +19,8 @@ namespace Mita.Api.IntegrationTests.Infrastructure;
 
 public static class TestData
 {
+    private static readonly JsonSerializerOptions WireJson = new(JsonSerializerDefaults.Web);
+
     public static async Task<Account> AddAccountAsync(
         WebApplicationFactory<Program> factory,
         Guid userId,
@@ -256,6 +260,119 @@ public static class TestData
         return repayment;
     }
 
+    public static async Task<(Group Group, GroupMember[] Members)> AddGroupAsync(
+        WebApplicationFactory<Program> factory,
+        Guid ownerId,
+        string name = "Trip",
+        Currency currency = Currency.EUR,
+        params string[] members)
+    {
+        var group = Group.Create(ownerId, name, currency);
+        var rows = (members.Length == 0 ? ["Anna", "Olya", "Max"] : members)
+            .Select((member, position) => GroupMember.Create(group.Id, member, position))
+            .ToArray();
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Groups.Add(group);
+        db.GroupMembers.AddRange(rows);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return (group, rows);
+    }
+
+    public static async Task<GroupExpense> AddGroupExpenseAsync(
+        WebApplicationFactory<Program> factory,
+        Group group,
+        GroupMember payer,
+        long amount,
+        GroupMember[] between,
+        string date = "2026-10-01",
+        bool deleted = false)
+    {
+        var shares = GroupExpenseSplits.Equal(amount, amount, between.Select(member => member.Id).ToList(), payer.Id);
+        var expense = GroupExpense.Create(
+            group.Id,
+            new ExpenseDetails(
+                payer.Id,
+                amount,
+                group.Currency,
+                ParseDate(date),
+                StandardGroupCategories.Default,
+                null,
+                [],
+                null,
+                1m,
+                false,
+                amount,
+                GroupSplitMode.Equal,
+                shares));
+        var state = JsonSerializer.Serialize(
+            new
+            {
+                expense.PayerId,
+                expense.Amount,
+                Currency = expense.Currency.ToString(),
+                expense.Date,
+                CategoryId = expense.StandardCategory,
+                expense.Tags,
+                expense.Description,
+                Rate = 1,
+                expense.RateManual,
+                expense.GroupAmount,
+                Split = "equal",
+                Shares = shares
+            },
+            WireJson);
+
+        await AddEntryAsync(
+            factory,
+            group,
+            GroupEntryKind.Expense,
+            expense.Id,
+            state,
+            deleted ? expense.Delete : null,
+            db => db.GroupExpenses.Add(expense));
+        return expense;
+    }
+
+    public static async Task<GroupRepayment> AddGroupRepaymentAsync(
+        WebApplicationFactory<Program> factory,
+        Group group,
+        GroupMember from,
+        GroupMember to,
+        long amount,
+        string date = "2026-10-05",
+        bool deleted = false)
+    {
+        var repayment = GroupRepayment.Create(
+            group.Id,
+            new GroupRepaymentDetails(from.Id, to.Id, amount, group.Currency, ParseDate(date), 1m, false, amount, null));
+        var state = JsonSerializer.Serialize(
+            new
+            {
+                repayment.FromMemberId,
+                repayment.ToMemberId,
+                repayment.Amount,
+                Currency = repayment.Currency.ToString(),
+                repayment.Date,
+                Rate = 1,
+                repayment.RateManual,
+                repayment.GroupAmount,
+                repayment.Note
+            },
+            WireJson);
+
+        await AddEntryAsync(
+            factory,
+            group,
+            GroupEntryKind.Repayment,
+            repayment.Id,
+            state,
+            deleted ? repayment.Delete : null,
+            db => db.GroupRepayments.Add(repayment));
+        return repayment;
+    }
+
     public static async Task AddRatesAsync(
         WebApplicationFactory<Program> factory,
         params (Currency Currency, string Date, decimal PlnValue)[] rows)
@@ -278,6 +395,33 @@ public static class TestData
                 existing.PlnValue = plnValue;
                 existing.FetchedAt = fetchedAt;
             }
+        }
+
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static async Task AddEntryAsync(
+        WebApplicationFactory<Program> factory,
+        Group group,
+        GroupEntryKind kind,
+        Guid entryId,
+        string state,
+        Action<DateTimeOffset>? delete,
+        Action<AppDbContext> add)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        var owner = GroupActor.Owner(group.OwnerId);
+        add(db);
+        db.GroupEntryEvents.Add(
+            GroupEntryEvent.Create(group.Id, kind, entryId, GroupEntryAction.Created, clock.GetUtcNow(), owner, state));
+        if (delete is not null)
+        {
+            var at = clock.GetUtcNow();
+            delete(at);
+            db.GroupEntryEvents.Add(
+                GroupEntryEvent.Create(group.Id, kind, entryId, GroupEntryAction.Deleted, at, owner, state));
         }
 
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);

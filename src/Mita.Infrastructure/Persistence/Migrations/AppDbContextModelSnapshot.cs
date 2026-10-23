@@ -528,6 +528,312 @@ namespace Mita.Infrastructure.Persistence.Migrations
                     b.ToTable("goal_contributions", (string)null);
                 });
 
+            modelBuilder.Entity("Mita.Domain.Groups.Group", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId", "CreatedAt");
+
+                    b.ToTable("groups", (string)null);
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.ToTable("group_categories", (string)null);
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupEntryEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<Guid?>("ActorMemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EntryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorMemberId");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("GroupId", "Kind", "EntryId", "At");
+
+                    b.ToTable("group_entry_events", (string)null);
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupExpense", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("GroupAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Rate")
+                        .HasPrecision(24, 12)
+                        .HasColumnType("numeric(24,12)");
+
+                    b.Property<bool>("RateManual")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Split")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("StandardCategory")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.PrimitiveCollection<string[]>("Tags")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("PayerId");
+
+                    b.HasIndex("GroupId", "Date");
+
+                    b.ToTable("group_expenses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_group_expenses_amount_positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_group_expenses_category", "(\"StandardCategory\" IS NULL) <> (\"CategoryId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_group_expenses_group_amount_positive", "\"GroupAmount\" > 0");
+
+                            t.HasCheckConstraint("CK_group_expenses_rate_positive", "\"Rate\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupExpenseShare", b =>
+                {
+                    b.Property<Guid>("ExpenseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("GroupAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ExpenseId", "MemberId");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("MemberId");
+
+                    b.ToTable("group_expense_shares", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_group_expense_shares_amount_positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_group_expense_shares_group_amount_not_negative", "\"GroupAmount\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "Position")
+                        .IsUnique();
+
+                    b.ToTable("group_members", (string)null);
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupRepayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FromMemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("GroupAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Rate")
+                        .HasPrecision(24, 12)
+                        .HasColumnType("numeric(24,12)");
+
+                    b.Property<bool>("RateManual")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ToMemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromMemberId");
+
+                    b.HasIndex("ToMemberId");
+
+                    b.HasIndex("GroupId", "Date");
+
+                    b.ToTable("group_repayments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_group_repayments_amount_positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_group_repayments_group_amount_positive", "\"GroupAmount\" > 0");
+
+                            t.HasCheckConstraint("CK_group_repayments_members_differ", "\"FromMemberId\" <> \"ToMemberId\"");
+
+                            t.HasCheckConstraint("CK_group_repayments_rate_positive", "\"Rate\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("Mita.Domain.Money.ExchangeRate", b =>
                 {
                     b.Property<string>("Currency")
@@ -999,6 +1305,114 @@ namespace Mita.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Mita.Domain.Groups.Group", b =>
+                {
+                    b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupCategory", b =>
+                {
+                    b.HasOne("Mita.Domain.Groups.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupEntryEvent", b =>
+                {
+                    b.HasOne("Mita.Domain.Groups.GroupMember", null)
+                        .WithMany()
+                        .HasForeignKey("ActorMemberId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Mita.Domain.Groups.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupExpense", b =>
+                {
+                    b.HasOne("Mita.Domain.Groups.GroupCategory", null)
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Mita.Domain.Groups.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Groups.GroupMember", null)
+                        .WithMany()
+                        .HasForeignKey("PayerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupExpenseShare", b =>
+                {
+                    b.HasOne("Mita.Domain.Groups.GroupExpense", null)
+                        .WithMany("Shares")
+                        .HasForeignKey("ExpenseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Groups.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Groups.GroupMember", null)
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupMember", b =>
+                {
+                    b.HasOne("Mita.Domain.Groups.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupRepayment", b =>
+                {
+                    b.HasOne("Mita.Domain.Groups.GroupMember", null)
+                        .WithMany()
+                        .HasForeignKey("FromMemberId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Groups.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Groups.GroupMember", null)
+                        .WithMany()
+                        .HasForeignKey("ToMemberId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Mita.Domain.Tags.Tag", b =>
                 {
                     b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
@@ -1062,6 +1476,11 @@ namespace Mita.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupExpense", b =>
+                {
+                    b.Navigation("Shares");
                 });
 
             modelBuilder.Entity("Mita.Domain.Transactions.Transaction", b =>

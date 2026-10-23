@@ -36,7 +36,9 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
             SELECT table_name FROM information_schema.tables
             WHERE table_schema = 'public' AND table_name IN ('AspNetUsers', 'user_settings', 'refresh_tokens',
                 'accounts', 'transfers', 'exchange_rates', 'account_movements', 'categories', 'transactions',
-                'budgets', 'goals', 'goal_contributions', 'tags', 'transaction_tags', 'debts', 'debt_repayments')
+                'budgets', 'goals', 'goal_contributions', 'tags', 'transaction_tags', 'debts', 'debt_repayments',
+                'groups', 'group_members', 'group_categories', 'group_expenses', 'group_expense_shares',
+                'group_repayments', 'group_entry_events')
             """,
             connection);
         var tables = new List<string>();
@@ -52,7 +54,8 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
             [
                 "AspNetUsers", "refresh_tokens", "user_settings", "accounts", "transfers", "exchange_rates",
                 "account_movements", "categories", "transactions", "budgets", "goals", "goal_contributions", "tags",
-                "transaction_tags", "debts", "debt_repayments"
+                "transaction_tags", "debts", "debt_repayments", "groups", "group_members", "group_categories",
+                "group_expenses", "group_expense_shares", "group_repayments", "group_entry_events"
             ],
             ignoreOrder: true);
 
@@ -72,7 +75,8 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
             FROM information_schema.columns
             WHERE table_schema = 'public'
               AND ((table_name = 'exchange_rates' AND column_name = 'PlnValue')
-                OR (table_name IN ('transactions', 'transfers') AND column_name = 'Rate'))
+                OR (table_name IN ('transactions', 'transfers', 'group_expenses', 'group_repayments')
+                    AND column_name = 'Rate'))
             """,
             connection);
         var columns = new List<string>();
@@ -85,8 +89,32 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
         }
 
         columns.ShouldBe(
-            ["exchange_rates.PlnValue numeric(24,12)", "transactions.Rate numeric(24,12)", "transfers.Rate numeric(24,12)"],
+            [
+                "exchange_rates.PlnValue numeric(24,12)", "transactions.Rate numeric(24,12)",
+                "transfers.Rate numeric(24,12)", "group_expenses.Rate numeric(24,12)",
+                "group_repayments.Rate numeric(24,12)"
+            ],
             ignoreOrder: true);
+
+        await using var groupColumns = new NpgsqlCommand(
+            """
+            SELECT table_name || '.' || column_name || ' ' || udt_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND ((table_name = 'group_expenses' AND column_name = 'Tags')
+                OR (table_name = 'group_entry_events' AND column_name = 'State'))
+            """,
+            connection);
+        var groupTypes = new List<string>();
+        await using (var reader = await groupColumns.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                groupTypes.Add(reader.GetString(0));
+            }
+        }
+
+        groupTypes.ShouldBe(["group_expenses.Tags _text", "group_entry_events.State jsonb"], ignoreOrder: true);
 
         await using var index = new NpgsqlCommand(
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'IX_tags_user_name'",
