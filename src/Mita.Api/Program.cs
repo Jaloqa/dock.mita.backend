@@ -6,6 +6,7 @@ using Mita.Api.Features.Budgets;
 using Mita.Api.Features.Categories;
 using Mita.Api.Features.Debts;
 using Mita.Api.Features.Goals;
+using Mita.Api.Features.Groups;
 using Mita.Api.Features.Overview;
 using Mita.Api.Features.Rates;
 using Mita.Api.Features.Reports;
@@ -64,6 +65,7 @@ app.MapTagsEndpoints();
 app.MapBudgetsEndpoints();
 app.MapGoalsEndpoints();
 app.MapDebtsEndpoints();
+app.MapGroupsEndpoints();
 app.MapReportsEndpoints();
 app.MapOverviewEndpoints();
 
