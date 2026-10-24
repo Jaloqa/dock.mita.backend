@@ -38,7 +38,8 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
                 'accounts', 'transfers', 'exchange_rates', 'account_movements', 'categories', 'transactions',
                 'budgets', 'goals', 'goal_contributions', 'tags', 'transaction_tags', 'debts', 'debt_repayments',
                 'groups', 'group_members', 'group_categories', 'group_expenses', 'group_expense_shares',
-                'group_repayments', 'group_entry_events', 'group_repayment_covers')
+                'group_repayments', 'group_entry_events', 'group_repayment_covers', 'group_confirmations',
+                'group_confirmation_transactions', 'group_account_legs')
             """,
             connection);
         var tables = new List<string>();
@@ -56,9 +57,20 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
                 "account_movements", "categories", "transactions", "budgets", "goals", "goal_contributions", "tags",
                 "transaction_tags", "debts", "debt_repayments", "groups", "group_members", "group_categories",
                 "group_expenses", "group_expense_shares", "group_repayments", "group_entry_events",
-                "group_repayment_covers"
+                "group_repayment_covers", "group_confirmations", "group_confirmation_transactions",
+                "group_account_legs"
             ],
             ignoreOrder: true);
+
+        var confirmationIndex = await IndexDefinitionAsync(
+            connection,
+            "group_confirmations",
+            "IX_group_confirmations_UserId_Kind_EntryId",
+            ct);
+        confirmationIndex.ShouldContain("CREATE UNIQUE INDEX");
+        confirmationIndex.ShouldContain("(\"UserId\", \"Kind\", \"EntryId\")");
+
+        (await AccountMovementsDefinitionAsync(connection, ct)).ShouldContain("group_account_legs");
 
         await using var function = new NpgsqlCommand(
             "SELECT count(*) FROM pg_proc WHERE proname = 'pln_value'",
@@ -332,6 +344,33 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
     }
 
     [Fact]
+    public async Task Should_RestoreAccountMovements_When_ConfirmationsAreRolledBack()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = postgres.NewDatabaseConnectionString();
+        await using var context = NewContext(connectionString);
+        await context.Database.MigrateAsync(ct);
+
+        await context.GetService<IMigrator>().MigrateAsync("GroupRepaymentCovers", cancellationToken: ct);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(ct);
+        var definition = await AccountMovementsDefinitionAsync(connection, ct);
+        definition.ShouldNotContain("group_account_legs");
+        definition.ShouldContain("debt_repayments");
+        await using var tables = new NpgsqlCommand(
+            """
+            SELECT count(*) FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name IN ('group_confirmations', 'group_confirmation_transactions', 'group_account_legs')
+            """,
+            connection);
+        ((long)(await tables.ExecuteScalarAsync(ct))!).ShouldBe(0);
+        await using var movements = new NpgsqlCommand("SELECT count(*) FROM account_movements", connection);
+        ((long)(await movements.ExecuteScalarAsync(ct))!).ShouldBe(0);
+    }
+
+    [Fact]
     public async Task Should_RejectSecondUser_When_NormalizedEmailRepeats()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -412,6 +451,15 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
         command.Parameters.AddWithValue("name", name);
         var definition = (string?)await command.ExecuteScalarAsync(ct);
         return definition.ShouldNotBeNull(name);
+    }
+
+    private static async Task<string> AccountMovementsDefinitionAsync(NpgsqlConnection connection, CancellationToken ct)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT pg_get_viewdef('account_movements'::regclass, true)",
+            connection);
+        var definition = (string?)await command.ExecuteScalarAsync(ct);
+        return definition.ShouldNotBeNull();
     }
 
     private static async Task Insert(NpgsqlConnection connection, CancellationToken ct)

@@ -64,6 +64,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
 
     public DbSet<GroupEntryEvent> GroupEntryEvents => Set<GroupEntryEvent>();
 
+    public DbSet<GroupConfirmation> GroupConfirmations => Set<GroupConfirmation>();
+
+    public DbSet<GroupConfirmationTransaction> GroupConfirmationTransactions => Set<GroupConfirmationTransaction>();
+
+    public DbSet<GroupAccountLeg> GroupAccountLegs => Set<GroupAccountLeg>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
