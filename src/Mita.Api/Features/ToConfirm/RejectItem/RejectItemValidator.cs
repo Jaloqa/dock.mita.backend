@@ -11,6 +11,6 @@ public sealed class RejectItemValidator : AbstractValidator<RejectItemCommand>
 
         RuleFor(command => command.Version)
             .Must(value => !JsonValues.IsMissing(value)).WithErrorCode("validation.required")
-            .Must(value => JsonValues.TryGetGuid(value, out _)).WithErrorCode("validation.invalidValue");
+            .Must(value => JsonValues.TryGetString(value, out _)).WithErrorCode("validation.invalidValue");
     }
 }

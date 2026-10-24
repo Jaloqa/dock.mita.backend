@@ -21,7 +21,7 @@ public static class ConfirmItemParser
 
     public static ParsedConfirmation Parse(ConfirmItemCommand command)
     {
-        if (!JsonValues.TryGetGuid(command.Version, out var version) || LineErrors(command.Lines).Any())
+        if (!JsonValues.TryGetString(command.Version, out var version) || LineErrors(command.Lines).Any())
         {
             throw new InvalidOperationException("The confirmation reached the handler without passing validation.");
         }

@@ -662,6 +662,81 @@ public sealed class ConfirmExpensesTests(MitaApiFactory factory) : IClassFixture
         back.GetProperty("current").GetProperty("amount").GetInt64().ShouldBe(15_000);
     }
 
+    [Fact]
+    public async Task Should_BookTheWholeAmountAsLeg_When_UserPaidWithoutAShare()
+    {
+        await using var app = await IsolatedAsync();
+        using var owner = new AuthClient(app);
+        using var user = new AuthClient(app);
+        var trip = await SetUpAsync(app, owner, user);
+        var overviewBefore = await GetAsync(user, "/v1/overview");
+        var expenseId = await CreateExpenseAsync(owner, trip.Group.Id, new
+        {
+            payerId = trip.Anna.Id,
+            amount = 12_000,
+            currency = "EUR",
+            date = IsoDay(Today),
+            categoryId = "cafes",
+            description = "Dinner",
+            split = new { mode = "equal", memberIds = new[] { trip.Olya.Id } }
+        });
+
+        var item = await ItemAsync(user, expenseId);
+
+        item.GetProperty("current").GetProperty("share").GetInt64().ShouldBe(0);
+        item.GetProperty("lines").GetArrayLength().ShouldBe(0);
+        item.GetProperty("other").GetInt64().ShouldBe(12_000);
+        using (var confirmed = await ConfirmAsync(user, expenseId, Suggested(item, trip.Konto.Id)))
+        {
+            confirmed.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        (await TransactionsAsync(user)).ShouldBeEmpty();
+        (await LegsAsync(app, trip.UserId)).ShouldBe([(trip.Konto.Id, Today, -51_600L)]);
+        (await BalanceAsync(user, trip.Konto.Id)).ShouldBe(48_400);
+        var overview = await GetAsync(user, "/v1/overview");
+        overview.GetProperty("income").GetProperty("amount").GetInt64().ShouldBe(0);
+        overview.GetProperty("expense").GetProperty("amount").GetInt64()
+            .ShouldBe(overviewBefore.GetProperty("expense").GetProperty("amount").GetInt64());
+        (await FindItemAsync(user, expenseId)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Should_RefuseTheConvertedAmount_When_ZeroOrAboveTheMaximum()
+    {
+        await using var app = await IsolatedAsync();
+        using var owner = new AuthClient(app);
+        using var user = new AuthClient(app);
+        var trip = await SetUpAsync(app, owner, user);
+        var tiny = await CreateExpenseAsync(owner, trip.Group.Id, new
+        {
+            payerId = trip.Anna.Id,
+            amount = 1,
+            currency = "EUR",
+            date = IsoDay(Today.AddDays(-2)),
+            categoryId = "cafes",
+            split = new { mode = "equal", memberIds = new[] { trip.Anna.Id } }
+        });
+        var huge = await CreateExpenseAsync(owner, trip.Group.Id, Dinner(trip.Anna, 1_000_000, Today.AddDays(-2)));
+
+        using (var zero = await ConfirmAsync(user, tiny, Suggested(await ItemAsync(user, tiny), trip.Konto.Id, 0.4m)))
+        {
+            await ShouldHaveErrorsAsync(zero, new() { ["rate"] = ["validation.positiveAmount"] });
+        }
+
+        using (var tooLarge = await ConfirmAsync(user, huge, Suggested(await ItemAsync(user, huge), trip.Konto.Id, 1_000_000m)))
+        {
+            await ShouldHaveErrorsAsync(tooLarge, new() { ["rate"] = ["validation.invalidValue"] });
+        }
+
+        (await TransactionsAsync(user)).ShouldBeEmpty();
+        (await LegsAsync(app, trip.UserId)).ShouldBeEmpty();
+        (await ConfirmationCountAsync(app, trip.UserId)).ShouldBe(0);
+        (await BalanceAsync(user, trip.Konto.Id)).ShouldBe(100_000);
+        (await ItemAsync(user, tiny)).GetProperty("change").GetString().ShouldBe("new");
+        (await ItemAsync(user, huge)).GetProperty("change").GetString().ShouldBe("new");
+    }
+
     private async Task<WebApplicationFactory<Program>> IsolatedAsync()
     {
         var app = factory.WithIsolatedData();
@@ -716,14 +791,14 @@ public sealed class ConfirmExpensesTests(MitaApiFactory factory) : IClassFixture
     private static object Body(JsonElement item, Guid accountId, params object[] lines) =>
         new { version = Version(item), accountId, lines };
 
-    private static Guid Version(JsonElement item) => item.GetProperty("version").GetGuid();
+    private static string Version(JsonElement item) => item.GetProperty("version").GetString()!;
 
     private static string ExpensePath(Trip trip, Guid expenseId) => $"{GroupsPath}/{trip.Group.Id}/expenses/{expenseId}";
 
     private static Task<HttpResponseMessage> ConfirmAsync(AuthClient client, Guid entryId, object body, string kind = "expenses") =>
         SendAsync(client, HttpMethod.Post, $"{ToConfirmPath}/{kind}/{entryId}/confirm", body);
 
-    private static Task<HttpResponseMessage> RejectAsync(AuthClient client, Guid entryId, Guid version, string kind = "expenses") =>
+    private static Task<HttpResponseMessage> RejectAsync(AuthClient client, Guid entryId, string version, string kind = "expenses") =>
         SendAsync(client, HttpMethod.Post, $"{ToConfirmPath}/{kind}/{entryId}/reject", new { version });
 
     private static async Task<Guid> CreateExpenseAsync(AuthClient client, Guid groupId, object body)

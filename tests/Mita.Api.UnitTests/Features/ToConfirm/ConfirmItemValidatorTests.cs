@@ -7,11 +7,12 @@ namespace Mita.Api.UnitTests.Features.ToConfirm;
 
 public sealed class ConfirmItemValidatorTests
 {
-    private const string Version = "0199f1c2-0000-7000-8000-000000000001";
+    private const string Version = "0199f1c2-0000-7000-8000-000000000001.0199f1c2-0000-7000-8000-000000000004";
 
     private const string Valid =
         """
-        {"version":"0199f1c2-0000-7000-8000-000000000001","accountId":"0199f1c2-0000-7000-8000-000000000002","rate":4.3,
+        {"version":"0199f1c2-0000-7000-8000-000000000001.0199f1c2-0000-7000-8000-000000000004",
+         "accountId":"0199f1c2-0000-7000-8000-000000000002","rate":4.3,
          "lines":[{"categoryId":"0199f1c2-0000-7000-8000-000000000003","title":"Dinner","tags":["dinner"]},
                   {"newCategory":"Trips","title":null,"tags":null}]}
         """;
@@ -20,8 +21,9 @@ public sealed class ConfirmItemValidatorTests
     {
         { "version", "null", "validation.required" },
         { "version", "\"  \"", "validation.required" },
-        { "version", "\"x\"", "validation.invalidValue" },
         { "version", "5", "validation.invalidValue" },
+        { "version", "true", "validation.invalidValue" },
+        { "version", "[\"x\"]", "validation.invalidValue" },
         { "accountId", "\"x\"", "validation.unknownAccount" },
         { "accountId", "5", "validation.unknownAccount" },
         { "rate", "0", "validation.invalidValue" },
@@ -79,6 +81,11 @@ public sealed class ConfirmItemValidatorTests
         Errors(Without(Valid, "version")).ShouldBe([("version", "validation.required")]);
 
     [Theory]
+    [InlineData("\"x\"")]
+    [InlineData("\"0199f1c2-0000-7000-8000-000000000001\"")]
+    public void Should_Pass_When_VersionIsAnyText(string json) => Errors(With(Valid, "version", json)).ShouldBeEmpty();
+
+    [Theory]
     [MemberData(nameof(InvalidFields))]
     public void Should_ReportOneCode_When_FieldInvalid(string field, string json, string code) =>
         Errors(With(Valid, field, json)).ShouldBe([(field, code)]);
@@ -95,7 +102,7 @@ public sealed class ConfirmItemValidatorTests
     [Fact]
     public void Should_ReportEveryInvalidLineField_When_SeveralInvalid() =>
         Errors(With(
-                With(Valid, "version", "\"x\""),
+                With(Valid, "version", "5"),
                 "lines",
                 "[{\"newCategory\":\"Trips\"},{\"title\":5,\"tags\":" + Tags(11) + "}]"))
             .ShouldBe(
@@ -110,12 +117,15 @@ public sealed class ConfirmItemValidatorTests
     [Theory]
     [InlineData("{}", "validation.required")]
     [InlineData("{\"version\":null}", "validation.required")]
-    [InlineData("{\"version\":\"x\"}", "validation.invalidValue")]
+    [InlineData("{\"version\":5}", "validation.invalidValue")]
     public void Should_ReportVersion_When_RejectVersionInvalid(string json, string code) =>
         RejectErrors(json).ShouldBe([("version", code)]);
 
-    [Fact]
-    public void Should_PassReject_When_VersionValid() => RejectErrors($"{{\"version\":\"{Version}\"}}").ShouldBeEmpty();
+    [Theory]
+    [InlineData(Version)]
+    [InlineData("x")]
+    public void Should_PassReject_When_VersionIsText(string version) =>
+        RejectErrors($"{{\"version\":\"{version}\"}}").ShouldBeEmpty();
 
     private static string Tags(int count) =>
         JsonSerializer.Serialize(Enumerable.Range(1, count).Select(index => $"tag{index}").ToArray());
