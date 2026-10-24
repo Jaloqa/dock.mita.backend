@@ -334,6 +334,17 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         ParameterNames(toConfirm.GetProperty("get")).ShouldContain("page");
         ParameterNames(toConfirm.GetProperty("get")).ShouldContain("pageSize");
         toConfirm.GetProperty("get").GetProperty("security").GetArrayLength().ShouldBe(2);
+
+        foreach (var decision in new[] { "confirm", "reject" })
+        {
+            paths.TryGetProperty($"/v1/to-confirm/{{kind}}/{{entryId}}/{decision}", out var path).ShouldBeTrue(decision);
+            MethodsOf(path).ShouldBe(["post"]);
+            var post = path.GetProperty("post");
+            TagOf(post).ShouldBe("To confirm");
+            ParameterNames(post).ShouldBe(["kind", "entryId"], ignoreOrder: true);
+            post.TryGetProperty("requestBody", out _).ShouldBeTrue(decision);
+            post.GetProperty("security").GetArrayLength().ShouldBe(2);
+        }
     }
 
     [Fact]

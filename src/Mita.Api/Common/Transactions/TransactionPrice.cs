@@ -24,13 +24,26 @@ public sealed record TransactionPrice(decimal Rate, long AccountAmount, long Bas
         }
 
         var accountAmount = MinorUnits.Convert(amount, accountRate, currency, accountCurrency);
+        return PriceInBase(amount, currency, accountAmount, accountCurrency, baseCurrency, plnValues) is { } baseAmount
+            ? new TransactionPrice(accountRate, accountAmount, baseAmount)
+            : null;
+    }
+
+    public static long? PriceInBase(
+        long amount,
+        Currency currency,
+        long accountAmount,
+        Currency accountCurrency,
+        Currency baseCurrency,
+        IReadOnlyDictionary<Currency, decimal> plnValues)
+    {
         if (currency == baseCurrency)
         {
-            return new TransactionPrice(accountRate, accountAmount, amount);
+            return amount;
         }
 
         return RateTable.Rate(plnValues, accountCurrency, baseCurrency) is { } baseRate
-            ? new TransactionPrice(accountRate, accountAmount, MinorUnits.Convert(accountAmount, baseRate, accountCurrency, baseCurrency))
+            ? MinorUnits.Convert(accountAmount, baseRate, accountCurrency, baseCurrency)
             : null;
     }
 }

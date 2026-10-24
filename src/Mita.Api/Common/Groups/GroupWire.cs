@@ -27,6 +27,17 @@ public static class GroupWire
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 
+    public static bool TryParseEntryPath(string? value, out GroupEntryKind kind)
+    {
+        (kind, var ok) = value switch
+        {
+            "expenses" => (GroupEntryKind.Expense, true),
+            "repayments" => (GroupEntryKind.Repayment, true),
+            _ => (default, false)
+        };
+        return ok;
+    }
+
     public static string ToWire(GroupRole role) => role switch
     {
         GroupRole.Owner => "owner",

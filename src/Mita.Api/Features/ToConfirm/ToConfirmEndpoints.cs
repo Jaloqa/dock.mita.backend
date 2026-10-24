@@ -1,5 +1,7 @@
 using Mita.Api.Extensions;
+using Mita.Api.Features.ToConfirm.ConfirmItem;
 using Mita.Api.Features.ToConfirm.ListToConfirm;
+using Mita.Api.Features.ToConfirm.RejectItem;
 
 namespace Mita.Api.Features.ToConfirm;
 
@@ -9,7 +11,9 @@ public static class ToConfirmEndpoints
     {
         app.MapV1()
             .WithTags("To confirm")
-            .MapListToConfirm();
+            .MapListToConfirm()
+            .MapConfirmItem()
+            .MapRejectItem();
 
         return app;
     }
