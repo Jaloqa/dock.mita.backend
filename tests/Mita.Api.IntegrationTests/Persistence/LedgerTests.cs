@@ -97,6 +97,29 @@ public sealed class LedgerTests(MitaApiFactory factory) : IClassFixture<MitaApiF
     }
 
     [Fact]
+    public async Task Should_CountGroupLegsInBalance()
+    {
+        using var client = new AuthClient(factory);
+        await client.RegisterNewAsync(Ct);
+        var userId = await UserIdAsync(client);
+        var account = await TestData.AddAccountAsync(factory, userId, openingBalance: 100_000);
+
+        await TestData.AddGroupLegAsync(factory, userId, account, -34_400);
+        await TestData.AddGroupLegAsync(factory, userId, account, 17_200);
+
+        var stored = await AccountAsync(userId, account.Id);
+        stored.Balance.ShouldBe(82_800);
+        stored.InUse.ShouldBeTrue();
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/v1/accounts/{account.Id}");
+        using var response = await client.Http.SendAsync(client.WithXsrf(request), Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        problem.GetProperty("errors").GetProperty("id").EnumerateArray().Select(code => code.GetString())
+            .ShouldBe(["validation.accountInUse"]);
+        (await AccountAsync(userId, account.Id)).Balance.ShouldBe(82_800);
+    }
+
+    [Fact]
     public async Task Should_ResolvePlnValue_LikeRateTable()
     {
         await using var isolated = factory.WithIsolatedData();

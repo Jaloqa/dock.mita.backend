@@ -318,6 +318,25 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
     }
 
     [Fact]
+    public async Task Should_DescribeToConfirm()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var paths = document.RootElement.GetProperty("paths");
+        paths.TryGetProperty("/v1/to-confirm", out var toConfirm).ShouldBeTrue();
+
+        MethodsOf(toConfirm).ShouldBe(["get"]);
+        TagOf(toConfirm.GetProperty("get")).ShouldBe("To confirm");
+        ParameterNames(toConfirm.GetProperty("get")).ShouldContain("page");
+        ParameterNames(toConfirm.GetProperty("get")).ShouldContain("pageSize");
+        toConfirm.GetProperty("get").GetProperty("security").GetArrayLength().ShouldBe(2);
+    }
+
+    [Fact]
     public async Task Should_DescribeSharedGroups()
     {
         const string prefix = "/v1/shared/groups/{token}";

@@ -370,6 +370,24 @@ public static class TestData
         return repayment;
     }
 
+    public static async Task<GroupAccountLeg> AddGroupLegAsync(
+        WebApplicationFactory<Program> factory,
+        Guid userId,
+        Account account,
+        long accountAmount)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
+        var confirmation = GroupConfirmation.Create(userId, Guid.NewGuid(), GroupEntryKind.Expense, Guid.NewGuid());
+        confirmation.Confirm("{}", account.Id, clock.GetUtcNow());
+        var leg = GroupAccountLeg.Create(userId, confirmation.Id, account.Id, new DateOnly(2026, 10, 1), accountAmount);
+        db.GroupConfirmations.Add(confirmation);
+        db.GroupAccountLegs.Add(leg);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return leg;
+    }
+
     public static async Task AddRatesAsync(
         WebApplicationFactory<Program> factory,
         params (Currency Currency, string Date, decimal PlnValue)[] rows)

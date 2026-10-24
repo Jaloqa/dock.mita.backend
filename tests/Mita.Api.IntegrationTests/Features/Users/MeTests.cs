@@ -308,6 +308,27 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
     }
 
     [Fact]
+    public async Task Should_DeleteUser_When_GroupLegsUseAccounts()
+    {
+        using var client = new AuthClient(factory);
+        var credentials = await client.RegisterNewAsync(Ct);
+        var userId = (await GetMeAsync(client)).GetProperty("id").GetGuid();
+        var account = await TestData.AddAccountAsync(factory, userId, openingBalance: 10_000);
+        var leg = await TestData.AddGroupLegAsync(factory, userId, account, -4_000);
+
+        using (var response = await DeleteAsync(client, new { password = credentials.Password }))
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        }
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await db.Accounts.AnyAsync(row => row.UserId == userId, Ct)).ShouldBeFalse();
+        (await db.GroupConfirmations.AnyAsync(row => row.Id == leg.ConfirmationId, Ct)).ShouldBeFalse();
+        (await db.GroupAccountLegs.AnyAsync(row => row.Id == leg.Id, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Should_DeleteUser_When_GroupsExist()
     {
         using var client = new AuthClient(factory);

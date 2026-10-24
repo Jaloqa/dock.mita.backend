@@ -20,6 +20,13 @@ public static class GroupWire
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
     };
 
+    public static string ToWire(GroupEntryKind kind) => kind switch
+    {
+        GroupEntryKind.Expense => "expense",
+        GroupEntryKind.Repayment => "repayment",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
+    };
+
     public static string ToWire(GroupRole role) => role switch
     {
         GroupRole.Owner => "owner",

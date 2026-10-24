@@ -575,6 +575,40 @@ namespace Mita.Infrastructure.Persistence.Migrations
                     b.ToTable("groups", (string)null);
                 });
 
+            modelBuilder.Entity("Mita.Domain.Groups.GroupAccountLeg", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AccountAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConfirmationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("ConfirmationId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("group_account_legs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_group_account_legs_amount_not_zero", "\"AccountAmount\" <> 0");
+                        });
+                });
+
             modelBuilder.Entity("Mita.Domain.Groups.GroupCategory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -599,6 +633,65 @@ namespace Mita.Infrastructure.Persistence.Migrations
                     b.HasIndex("GroupId");
 
                     b.ToTable("group_categories", (string)null);
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupConfirmation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfirmedTerms")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EntryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HandledTerms")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("UserId", "Kind", "EntryId")
+                        .IsUnique();
+
+                    b.ToTable("group_confirmations", (string)null);
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupConfirmationTransaction", b =>
+                {
+                    b.Property<Guid>("TransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConfirmationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ExpenseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("TransactionId");
+
+                    b.HasIndex("ConfirmationId");
+
+                    b.ToTable("group_confirmation_transactions", (string)null);
                 });
 
             modelBuilder.Entity("Mita.Domain.Groups.GroupEntryEvent", b =>
@@ -1378,11 +1471,61 @@ namespace Mita.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Mita.Domain.Groups.GroupAccountLeg", b =>
+                {
+                    b.HasOne("Mita.Domain.Accounts.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Groups.GroupConfirmation", null)
+                        .WithMany()
+                        .HasForeignKey("ConfirmationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Mita.Domain.Groups.GroupCategory", b =>
                 {
                     b.HasOne("Mita.Domain.Groups.Group", null)
                         .WithMany()
                         .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupConfirmation", b =>
+                {
+                    b.HasOne("Mita.Domain.Accounts.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupConfirmationTransaction", b =>
+                {
+                    b.HasOne("Mita.Domain.Groups.GroupConfirmation", null)
+                        .WithMany()
+                        .HasForeignKey("ConfirmationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Transactions.Transaction", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

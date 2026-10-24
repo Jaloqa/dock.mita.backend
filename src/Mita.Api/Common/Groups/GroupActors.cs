@@ -32,6 +32,29 @@ public sealed class GroupActors
         return new GroupActors(group.OwnerId, ownerName, memberNames);
     }
 
+    public static async Task<IReadOnlyDictionary<Guid, GroupActors>> LoadAsync(
+        AppDbContext db,
+        IReadOnlyCollection<Guid> groupIds,
+        CancellationToken ct)
+    {
+        var owners = await db.Groups.AsNoTracking()
+            .Where(group => groupIds.Contains(group.Id))
+            .Join(db.Users, group => group.OwnerId, user => user.Id, (group, user) => new { group.Id, group.OwnerId, user.Name })
+            .ToListAsync(ct);
+        var members = (await db.GroupMembers.AsNoTracking()
+                .Where(member => groupIds.Contains(member.GroupId))
+                .Select(member => new { member.Id, member.GroupId, member.Name })
+                .ToListAsync(ct))
+            .ToLookup(member => member.GroupId);
+
+        return owners.ToDictionary(
+            owner => owner.Id,
+            owner => new GroupActors(
+                owner.OwnerId,
+                owner.Name,
+                members[owner.Id].ToDictionary(member => member.Id, member => member.Name)));
+    }
+
     public GroupActorDto Describe(Guid? actorUserId, Guid? actorMemberId) => (actorUserId, actorMemberId) switch
     {
         (null, { } memberId) => new GroupActorDto(MemberKind, memberId, memberNames[memberId]),
