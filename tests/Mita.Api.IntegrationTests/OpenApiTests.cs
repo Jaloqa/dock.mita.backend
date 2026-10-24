@@ -244,6 +244,7 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         paths.TryGetProperty("/v1/groups/{id}/repayments/{repaymentId}/history", out var repaymentHistory).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/balances", out var balances).ShouldBeTrue();
         paths.TryGetProperty("/v1/groups/{id}/membership", out var membership).ShouldBeTrue();
+        paths.TryGetProperty("/v1/groups/{id}/open-shares", out var openShares).ShouldBeTrue();
 
         TagOf(groups.GetProperty("get")).ShouldBe("Groups");
         TagOf(groups.GetProperty("post")).ShouldBe("Groups");
@@ -283,6 +284,9 @@ public sealed class OpenApiTests(MitaApiFactory factory) : IClassFixture<MitaApi
         ParameterNames(balances.GetProperty("get")).ShouldContain("currency");
         MethodsOf(membership).ShouldBe(["delete"]);
         TagOf(membership.GetProperty("delete")).ShouldBe("Groups");
+        MethodsOf(openShares).ShouldBe(["get"]);
+        TagOf(openShares.GetProperty("get")).ShouldBe("Groups");
+        openShares.GetProperty("get").GetProperty("security").GetArrayLength().ShouldBe(2);
     }
 
     [Fact]

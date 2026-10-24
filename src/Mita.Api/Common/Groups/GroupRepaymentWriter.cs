@@ -9,9 +9,12 @@ namespace Mita.Api.Common.Groups;
 
 public sealed class GroupRepaymentWriter(AppDbContext db, TimeProvider time)
 {
+    public const string UnknownShare = "validation.unknownShare";
+
     public async Task<Result<GroupRepaymentDetails>> PrepareAsync(
         GroupContext group,
         ParsedGroupRepayment input,
+        Guid? repaymentId,
         CancellationToken ct)
     {
         var memberIds = await db.GroupMembers.AsNoTracking()
@@ -29,6 +32,21 @@ public sealed class GroupRepaymentWriter(AppDbContext db, TimeProvider time)
         if (!memberIds.Contains(input.ToMemberId))
         {
             errors["toMemberId"] = [GroupSplitInput.UnknownMember];
+        }
+
+        var open = await db.OpenSharesAsync(group.GroupId, input.FromMemberId, input.ToMemberId, repaymentId, ct);
+        var ownCovers = repaymentId is { } id
+            ? await db.GroupRepaymentCovers.AsNoTracking()
+                .Where(cover => cover.RepaymentId == id)
+                .Select(cover => cover.ExpenseId)
+                .ToListAsync(ct)
+            : [];
+        var settles = input.Settles
+            .Where(expenseId => open.Any(share => share.ExpenseId == expenseId) || !ownCovers.Contains(expenseId))
+            .ToList();
+        if (settles.Any(expenseId => open.All(share => share.ExpenseId != expenseId)))
+        {
+            errors["settles"] = [UnknownShare];
         }
 
         if (errors.Count > 0)
@@ -53,6 +71,11 @@ public sealed class GroupRepaymentWriter(AppDbContext db, TimeProvider time)
             return Error.Validation(new Dictionary<string, string[]> { ["rate"] = ["validation.invalidValue"] });
         }
 
+        var covers = GroupCoverAllocation.Allocate(
+            price.GroupAmount,
+            [.. open.Select(share => (share.ExpenseId, share.Open))],
+            settles);
+
         return new GroupRepaymentDetails(
             input.FromMemberId,
             input.ToMemberId,
@@ -62,6 +85,24 @@ public sealed class GroupRepaymentWriter(AppDbContext db, TimeProvider time)
             price.Rate,
             price.RateManual,
             price.GroupAmount,
-            input.Note);
+            input.Note,
+            covers);
+    }
+
+    public async Task<IReadOnlyList<GroupCover>> RestoredCoversAsync(
+        GroupContext group,
+        GroupRepayment repayment,
+        CancellationToken ct)
+    {
+        var open = await db.OpenSharesAsync(
+            group.GroupId,
+            repayment.FromMemberId,
+            repayment.ToMemberId,
+            repayment.Id,
+            ct);
+        return GroupCoverAllocation.Reallocate(
+            repayment.GroupAmount,
+            [.. open.Select(share => (share.ExpenseId, share.Open))],
+            [.. repayment.Covers.OrderBy(cover => cover.Position).Select(cover => cover.ExpenseId)]);
     }
 }

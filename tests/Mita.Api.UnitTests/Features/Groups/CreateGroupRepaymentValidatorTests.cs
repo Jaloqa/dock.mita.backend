@@ -12,7 +12,8 @@ public sealed class CreateGroupRepaymentValidatorTests
     private const string Valid =
         """
         {"fromMemberId":"0199f1c2-0000-7000-8000-000000000001","toMemberId":"0199f1c2-0000-7000-8000-000000000002",
-         "amount":10000,"currency":"EUR","date":"2026-10-18","rate":4.5,"note":"Cash"}
+         "amount":10000,"currency":"EUR","date":"2026-10-18","rate":4.5,"note":"Cash",
+         "settles":["0199f1c2-0000-7000-8000-000000000003"]}
         """;
 
     private static readonly DateTimeOffset Now = new(2026, 10, 18, 23, 30, 0, TimeSpan.Zero);
@@ -46,7 +47,16 @@ public sealed class CreateGroupRepaymentValidatorTests
         { "rate", "1000000001", "validation.invalidValue" },
         { "note", "5", "validation.invalidValue" },
         { "note", "\"A\\u0007\"", "validation.invalidValue" },
-        { "note", "\"" + new string('a', 201) + "\"", "validation.noteTooLong" }
+        { "note", "\"" + new string('a', 201) + "\"", "validation.noteTooLong" },
+        { "settles", "\"x\"", "validation.invalidValue" },
+        { "settles", "\"  \"", "validation.invalidValue" },
+        { "settles", "{}", "validation.invalidValue" },
+        { "settles", $"[\"{First}\",\"{First}\"]", "validation.invalidValue" },
+        { "settles", $"[\"{First}\",\"{First.ToUpperInvariant()}\"]", "validation.invalidValue" },
+        { "settles", Guids(51), "validation.invalidValue" },
+        { "settles", "[\"x\"]", "validation.invalidValue" },
+        { "settles", "[5]", "validation.invalidValue" },
+        { "settles", "[null]", "validation.invalidValue" }
     };
 
     public static TheoryData<string, string> ValidFields => new()
@@ -63,14 +73,18 @@ public sealed class CreateGroupRepaymentValidatorTests
         { "note", "\"" + new string('a', 200) + "\"" },
         { "note", "\"  " + new string('a', 200) + "  \"" },
         { "note", "\"   \"" },
-        { "note", "null" }
+        { "note", "null" },
+        { "settles", "[]" },
+        { "settles", "null" },
+        { "settles", $"[\"{First}\"]" },
+        { "settles", Guids(50) }
     };
 
     [Fact]
     public void Should_Pass_When_AllFieldsValid() => Errors(Valid).ShouldBeEmpty();
 
     [Fact]
-    public void Should_Pass_When_OptionalFieldsAbsent() => Errors(Without(Valid, "rate", "note")).ShouldBeEmpty();
+    public void Should_Pass_When_OptionalFieldsAbsent() => Errors(Without(Valid, "rate", "note", "settles")).ShouldBeEmpty();
 
     [Theory]
     [MemberData(nameof(InvalidFields))]
@@ -104,6 +118,9 @@ public sealed class CreateGroupRepaymentValidatorTests
 
     private static string Pascal(string field) => char.ToUpperInvariant(field[0]) + field[1..];
 
+    private static string Guids(int count) =>
+        JsonSerializer.Serialize(Enumerable.Range(1, count).Select(index => $"0199f1c2-0000-7000-8000-{index:D12}").ToArray());
+
     private static string With(string source, string field, string json)
     {
         var body = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(source)!;
@@ -133,7 +150,8 @@ public sealed class CreateGroupRepaymentValidatorTests
             request.Currency,
             request.Date,
             request.Rate,
-            request.Note);
+            request.Note,
+            request.Settles);
         var validator = new CreateGroupRepaymentValidator(new FixedTimeProvider(Now));
         return [.. validator.Validate(command).Errors.Select(error => (error.PropertyName, error.ErrorCode))];
     }

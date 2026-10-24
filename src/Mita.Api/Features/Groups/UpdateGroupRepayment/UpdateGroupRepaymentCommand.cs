@@ -12,7 +12,8 @@ public sealed record UpdateGroupRepaymentRequest(
     JsonElement? Currency,
     JsonElement? Date,
     JsonElement? Rate,
-    JsonElement? Note);
+    JsonElement? Note,
+    JsonElement? Settles);
 
 public sealed record UpdateGroupRepaymentCommand(
     GroupScope Scope,
@@ -23,4 +24,5 @@ public sealed record UpdateGroupRepaymentCommand(
     JsonElement? Currency,
     JsonElement? Date,
     JsonElement? Rate,
-    JsonElement? Note) : IRequest<Result<GroupRepaymentDto>>, IGroupRepaymentInput;
+    JsonElement? Note,
+    JsonElement? Settles) : IRequest<Result<GroupRepaymentDto>>, IGroupRepaymentInput;

@@ -42,6 +42,13 @@ public static class GroupEntryLocks
                 $"""SELECT * FROM group_repayments WHERE "Id" = {repaymentId} AND "GroupId" = {groupId} AND ("DeletedAt" IS NOT NULL) = {deleted} FOR UPDATE""")
             .ToListAsync(ct);
 
-        return rows.SingleOrDefault();
+        var repayment = rows.SingleOrDefault();
+        if (repayment is null)
+        {
+            return null;
+        }
+
+        await db.Entry(repayment).Collection(row => row.Covers).LoadAsync(ct);
+        return repayment;
     }
 }

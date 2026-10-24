@@ -275,7 +275,7 @@ public sealed class GroupMembersTests(MitaApiFactory factory) : IClassFixture<Mi
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var stored = await db.GroupRepayments.SingleAsync(row => row.Id == repayment.Id, Ct);
-            var edited = new GroupRepaymentDetails(anna.Id, olya.Id, 2_000, Currency.EUR, stored.Date, 1m, false, 2_000, null);
+            var edited = new GroupRepaymentDetails(anna.Id, olya.Id, 2_000, Currency.EUR, stored.Date, 1m, false, 2_000, null, []);
             stored.Update(edited);
             db.GroupEntryEvents.Add(UpdatedEvent(group, GroupEntryKind.Repayment, stored.Id, edited));
             await db.SaveChangesAsync(Ct);

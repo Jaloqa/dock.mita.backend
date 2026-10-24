@@ -6,7 +6,11 @@ using Mita.Infrastructure.Persistence;
 
 namespace Mita.Api.Features.Groups.RestoreGroupRepayment;
 
-public sealed class RestoreGroupRepaymentHandler(AppDbContext db, GroupAccess access, TimeProvider time)
+public sealed class RestoreGroupRepaymentHandler(
+    AppDbContext db,
+    GroupAccess access,
+    GroupRepaymentWriter writer,
+    TimeProvider time)
     : IRequestHandler<RestoreGroupRepaymentCommand, Result<GroupRepaymentDto>>
 {
     public async Task<Result<GroupRepaymentDto>> Handle(
@@ -15,7 +19,7 @@ public sealed class RestoreGroupRepaymentHandler(AppDbContext db, GroupAccess ac
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var opened = await access.OpenForWriteAsync(command.Scope, GroupLock.Share, cancellationToken);
+        var opened = await access.OpenForWriteAsync(command.Scope, GroupLock.Update, cancellationToken);
         if (!opened.IsSuccess)
         {
             return opened.Error!;
@@ -29,7 +33,7 @@ public sealed class RestoreGroupRepaymentHandler(AppDbContext db, GroupAccess ac
             return Error.NotFound();
         }
 
-        repayment.Restore();
+        repayment.Restore(await writer.RestoredCoversAsync(group, repayment, cancellationToken));
         GroupEntryEvents.Append(
             db,
             group,

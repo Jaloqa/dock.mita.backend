@@ -869,6 +869,35 @@ namespace Mita.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mita.Domain.Groups.GroupRepaymentCover", b =>
+                {
+                    b.Property<Guid>("RepaymentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ExpenseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("GroupAmount")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.HasKey("RepaymentId", "ExpenseId");
+
+                    b.HasIndex("ExpenseId");
+
+                    b.HasIndex("GroupId");
+
+                    b.ToTable("group_repayment_covers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_group_repayment_covers_amount_positive", "\"GroupAmount\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("Mita.Domain.Money.ExchangeRate", b =>
                 {
                     b.Property<string>("Currency")
@@ -1453,6 +1482,27 @@ namespace Mita.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Mita.Domain.Groups.GroupRepaymentCover", b =>
+                {
+                    b.HasOne("Mita.Domain.Groups.GroupExpense", null)
+                        .WithMany()
+                        .HasForeignKey("ExpenseId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Groups.Group", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mita.Domain.Groups.GroupRepayment", null)
+                        .WithMany("Covers")
+                        .HasForeignKey("RepaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Mita.Domain.Tags.Tag", b =>
                 {
                     b.HasOne("Mita.Infrastructure.Identity.AppUser", null)
@@ -1521,6 +1571,11 @@ namespace Mita.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Mita.Domain.Groups.GroupExpense", b =>
                 {
                     b.Navigation("Shares");
+                });
+
+            modelBuilder.Entity("Mita.Domain.Groups.GroupRepayment", b =>
+                {
+                    b.Navigation("Covers");
                 });
 
             modelBuilder.Entity("Mita.Domain.Transactions.Transaction", b =>

@@ -321,21 +321,22 @@ public sealed class GroupsTests(MitaApiFactory factory) : IClassFixture<MitaApiF
         var userId = await UserIdAsync(client);
         var (group, members) = await TestData.AddGroupAsync(factory, userId, "Trip");
         var (survivor, _) = await TestData.AddGroupAsync(factory, userId, "Survivor");
-        await TestData.AddGroupExpenseAsync(factory, group, members[0], 9_000, members);
+        var paid = await TestData.AddGroupExpenseAsync(factory, group, members[0], 9_000, members);
         await TestData.AddGroupExpenseAsync(factory, group, members[1], 600, [members[2]], deleted: true);
-        await TestData.AddGroupRepaymentAsync(factory, group, members[2], members[0], 1_500);
+        await TestData.AddGroupRepaymentAsync(
+            factory, group, members[2], members[0], 1_500, covers: [new GroupCover(paid.Id, 1_500)]);
         await AddCategorisedExpenseAsync(group, members[1]);
         await TestData.LinkMemberAsync(factory, members[0], userId);
         await TestData.InviteMemberAsync(factory, members[2], "max@example.com");
 
-        (await RowCountsAsync(group.Id)).ShouldBe([1, 3, 1, 3, 7, 1, 5]);
+        (await RowCountsAsync(group.Id)).ShouldBe([1, 3, 1, 3, 7, 1, 1, 5]);
 
         using var response = await DeleteAsync(client, $"{GroupsPath}/{group.Id}");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         using var read = await client.Http.GetAsync($"{GroupsPath}/{group.Id}", Ct);
         read.StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await RowCountsAsync(group.Id)).ShouldBe([0, 0, 0, 0, 0, 0, 0]);
+        (await RowCountsAsync(group.Id)).ShouldBe([0, 0, 0, 0, 0, 0, 0, 0]);
         using var list = await client.Http.GetAsync(GroupsPath, Ct);
         (await list.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("items").EnumerateArray()
             .Select(item => item.GetProperty("id").GetGuid()).ShouldBe([survivor.Id]);
@@ -383,6 +384,7 @@ public sealed class GroupsTests(MitaApiFactory factory) : IClassFixture<MitaApiF
             await db.GroupExpenses.CountAsync(row => row.GroupId == groupId, Ct),
             await db.GroupExpenseShares.CountAsync(row => row.GroupId == groupId, Ct),
             await db.GroupRepayments.CountAsync(row => row.GroupId == groupId, Ct),
+            await db.GroupRepaymentCovers.CountAsync(row => row.GroupId == groupId, Ct),
             await db.GroupEntryEvents.CountAsync(row => row.GroupId == groupId, Ct)
         ];
     }

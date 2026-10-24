@@ -20,12 +20,12 @@ public sealed class GroupRepaymentsTests(MitaApiFactory factory) : IClassFixture
     private static readonly string[] RepaymentProperties =
     [
         "id", "fromMemberId", "toMemberId", "amount", "currency", "date", "rate", "rateManual", "groupAmount", "note",
-        "deleted", "createdBy", "createdAt", "updatedBy", "updatedAt"
+        "deleted", "createdBy", "createdAt", "updatedBy", "updatedAt", "covers"
     ];
 
     private static readonly string[] StateProperties =
     [
-        "fromMemberId", "toMemberId", "amount", "currency", "date", "rate", "rateManual", "groupAmount", "note"
+        "fromMemberId", "toMemberId", "amount", "currency", "date", "rate", "rateManual", "groupAmount", "note", "covers"
     ];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -59,6 +59,7 @@ public sealed class GroupRepaymentsTests(MitaApiFactory factory) : IClassFixture
         body.GetProperty("rateManual").GetBoolean().ShouldBeFalse();
         body.GetProperty("groupAmount").GetInt64().ShouldBe(2_000);
         body.GetProperty("note").ValueKind.ShouldBe(JsonValueKind.Null);
+        body.GetProperty("covers").GetArrayLength().ShouldBe(0);
         body.GetProperty("deleted").GetBoolean().ShouldBeFalse();
         var createdBy = body.GetProperty("createdBy");
         createdBy.EnumerateObject().Select(property => property.Name).ShouldBe(["kind", "memberId", "name"], ignoreOrder: true);

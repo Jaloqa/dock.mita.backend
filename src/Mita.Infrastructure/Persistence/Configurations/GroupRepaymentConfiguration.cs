@@ -28,6 +28,8 @@ public sealed class GroupRepaymentConfiguration : IEntityTypeConfiguration<Group
         builder.HasIndex(repayment => repayment.FromMemberId);
         builder.HasIndex(repayment => repayment.ToMemberId);
 
+        builder.Navigation(repayment => repayment.Covers).HasField("covers");
+
         builder.HasOne<Group>()
             .WithMany()
             .HasForeignKey(repayment => repayment.GroupId)

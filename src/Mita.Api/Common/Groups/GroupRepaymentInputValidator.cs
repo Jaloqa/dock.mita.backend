@@ -57,6 +57,9 @@ public abstract class GroupRepaymentInputValidator<T> : AbstractValidator<T>
                 && (text is null || text.Length <= GroupRepayment.NoteMaxLength))
             .WithErrorCode(NoteTooLong)
             .When(input => !JsonValues.IsMissing(input.Note));
+
+        RuleFor(input => input.Settles)
+            .Must(value => GroupRepaymentInputParser.TryParseSettles(value, out _)).WithErrorCode(InvalidValue);
     }
 
     private static bool IsSameMember(JsonElement? from, JsonElement? to) =>

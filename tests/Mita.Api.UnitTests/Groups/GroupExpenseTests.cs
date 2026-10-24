@@ -215,7 +215,73 @@ public sealed class GroupExpenseTests
     public void Should_Throw_When_RepaymentMembersAreEqual() =>
         Should.Throw<ArgumentException>(() => GroupRepayment.Create(
             Guid.NewGuid(),
-            new GroupRepaymentDetails(A, A, 1_000, Currency.EUR, Date, 1m, false, 1_000, null)));
+            new GroupRepaymentDetails(A, A, 1_000, Currency.EUR, Date, 1m, false, 1_000, null, [])));
+
+    [Fact]
+    public void Should_ReplaceCoversInOrder_When_RepaymentUpdated()
+    {
+        var groupId = Guid.NewGuid();
+        var repayment = GroupRepayment.Create(
+            groupId,
+            Repayment(4_000, [new GroupCover(C, 2_000), new GroupCover(D, 2_000)]));
+
+        repayment.Covers.Select(cover => (cover.ExpenseId, cover.GroupAmount, cover.Position))
+            .ShouldBe([(C, 2_000L, 0), (D, 2_000L, 1)]);
+        repayment.Covers.ShouldAllBe(cover => cover.RepaymentId == repayment.Id && cover.GroupId == groupId);
+
+        repayment.Update(Repayment(4_000, [new GroupCover(D, 3_000), new GroupCover(A, 1_000)]));
+
+        repayment.Covers.Select(cover => (cover.ExpenseId, cover.GroupAmount, cover.Position))
+            .ShouldBe([(D, 3_000L, 0), (A, 1_000L, 1)]);
+    }
+
+    [Theory]
+    [InlineData(0L, 1_000L)]
+    [InlineData(-1L, 1_000L)]
+    [InlineData(3_000L, 1_001L)]
+    public void Should_Throw_When_CoversAreInvalid(long first, long second) =>
+        Should.Throw<ArgumentException>(() => GroupRepayment.Create(
+            Guid.NewGuid(),
+            Repayment(4_000, [new GroupCover(C, first), new GroupCover(D, second)])));
+
+    [Fact]
+    public void Should_ReplaceCovers_When_RepaymentRestored()
+    {
+        var repayment = GroupRepayment.Create(Guid.NewGuid(), Repayment(4_000, [new GroupCover(C, 3_000), new GroupCover(D, 1_000)]));
+        repayment.Delete(At);
+
+        repayment.Restore([new GroupCover(D, 2_000)]);
+
+        repayment.IsDeleted.ShouldBeFalse();
+        repayment.Covers.Select(cover => (cover.ExpenseId, cover.GroupAmount, cover.Position)).ShouldBe([(D, 2_000L, 0)]);
+    }
+
+    [Fact]
+    public void Should_Throw_When_RestoredCoversExceedTheGroupAmount()
+    {
+        var repayment = GroupRepayment.Create(Guid.NewGuid(), Repayment(4_000, []));
+        repayment.Delete(At);
+
+        Should.Throw<ArgumentException>(() => repayment.Restore([new GroupCover(C, 4_001)]));
+        repayment.IsDeleted.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Should_Throw_When_RestoringALiveRepayment()
+    {
+        var repayment = GroupRepayment.Create(Guid.NewGuid(), Repayment(4_000, []));
+
+        Should.Throw<InvalidOperationException>(() => repayment.Restore([]));
+    }
+
+    [Fact]
+    public void Should_Throw_When_CoversRepeatAnExpense() =>
+        Should.Throw<ArgumentException>(() => GroupRepayment.Create(
+            Guid.NewGuid(),
+            Repayment(4_000, [new GroupCover(C, 1_000), new GroupCover(C, 1_000)])));
+
+    private static GroupRepaymentDetails Repayment(long groupAmount, IReadOnlyList<GroupCover> covers) =>
+        new(A, B, groupAmount, Currency.EUR, Date, 1m, false, groupAmount, null, covers);
 
     private static ExpenseDetails Details(
         IReadOnlyList<GroupShare> shares,

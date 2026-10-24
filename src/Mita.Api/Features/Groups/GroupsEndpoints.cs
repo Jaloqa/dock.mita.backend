@@ -18,6 +18,7 @@ using Mita.Api.Features.Groups.LinkMember;
 using Mita.Api.Features.Groups.ListExpenses;
 using Mita.Api.Features.Groups.ListGroupRepayments;
 using Mita.Api.Features.Groups.ListGroups;
+using Mita.Api.Features.Groups.ListOpenShares;
 using Mita.Api.Features.Groups.RemoveMember;
 using Mita.Api.Features.Groups.RenameMember;
 using Mita.Api.Features.Groups.RestoreExpense;
@@ -65,6 +66,7 @@ public static class GroupsEndpoints
             .MapDeleteGroupRepayment()
             .MapRestoreGroupRepayment()
             .MapGroupRepaymentHistory()
+            .MapListOpenShares()
             .MapGetGroupBalances();
 
         return app;

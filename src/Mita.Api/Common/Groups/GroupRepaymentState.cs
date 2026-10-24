@@ -13,8 +13,12 @@ public sealed record GroupRepaymentState(
     double Rate,
     bool RateManual,
     long GroupAmount,
-    string? Note)
+    string? Note,
+    IReadOnlyList<GroupCoverDto> Covers)
 {
+    // States recorded before repayments had covers carry no "covers" property.
+    public IReadOnlyList<GroupCoverDto> Covers { get; init; } = Covers ?? [];
+
     public static GroupRepaymentState From(GroupRepayment repayment) =>
         new(
             repayment.FromMemberId,
@@ -25,5 +29,10 @@ public sealed record GroupRepaymentState(
             (double)repayment.Rate,
             repayment.RateManual,
             repayment.GroupAmount,
-            repayment.Note);
+            repayment.Note,
+            [
+                .. repayment.Covers
+                    .OrderBy(cover => cover.Position)
+                    .Select(cover => new GroupCoverDto(cover.ExpenseId, cover.GroupAmount))
+            ]);
 }

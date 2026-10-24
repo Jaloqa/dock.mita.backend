@@ -14,6 +14,7 @@ public sealed record GroupRepaymentDto(
     bool RateManual,
     long GroupAmount,
     string? Note,
+    IReadOnlyList<GroupRepaymentCoverDto> Covers,
     bool Deleted,
     GroupActorDto CreatedBy,
     [property: JsonConverter(typeof(UtcIsoDateTimeOffsetConverter))] DateTimeOffset CreatedAt,

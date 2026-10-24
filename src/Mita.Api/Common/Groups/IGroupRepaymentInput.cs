@@ -17,4 +17,6 @@ public interface IGroupRepaymentInput
     JsonElement? Rate { get; }
 
     JsonElement? Note { get; }
+
+    JsonElement? Settles { get; }
 }
