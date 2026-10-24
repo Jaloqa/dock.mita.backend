@@ -66,6 +66,22 @@ public static class GroupRepaymentQueries
             RateManual = repayment.RateManual,
             GroupAmount = repayment.GroupAmount,
             Note = repayment.Note,
+            Covers = repayment.Covers
+                .Join(
+                    db.GroupExpenses,
+                    cover => cover.ExpenseId,
+                    expense => expense.Id,
+                    (cover, expense) => new CoverRow
+                    {
+                        ExpenseId = cover.ExpenseId,
+                        Position = cover.Position,
+                        GroupAmount = cover.GroupAmount,
+                        Description = expense.Description,
+                        StandardCategory = expense.StandardCategory,
+                        CategoryId = expense.CategoryId
+                    })
+                .OrderBy(cover => cover.Position)
+                .ToList(),
             Deleted = repayment.DeletedAt != null,
             Created = events
                 .Where(entryEvent => entryEvent.EntryId == repayment.Id)
@@ -110,6 +126,13 @@ public static class GroupRepaymentQueries
             row.RateManual,
             row.GroupAmount,
             row.Note,
+            [
+                .. row.Covers.Select(cover => new GroupRepaymentCoverDto(
+                    cover.ExpenseId,
+                    cover.GroupAmount,
+                    cover.Description,
+                    GroupWire.ToWireCategory(cover.StandardCategory, cover.CategoryId)))
+            ],
             row.Deleted,
             actors.Describe(created.ActorUserId, created.ActorMemberId),
             created.At,
@@ -139,11 +162,28 @@ public static class GroupRepaymentQueries
 
         public string? Note { get; init; }
 
+        public List<CoverRow> Covers { get; init; } = [];
+
         public bool Deleted { get; init; }
 
         public EventRow? Created { get; init; }
 
         public EventRow? Latest { get; init; }
+    }
+
+    private sealed class CoverRow
+    {
+        public Guid ExpenseId { get; init; }
+
+        public int Position { get; init; }
+
+        public long GroupAmount { get; init; }
+
+        public string? Description { get; init; }
+
+        public string? StandardCategory { get; init; }
+
+        public Guid? CategoryId { get; init; }
     }
 
     private sealed class EventRow

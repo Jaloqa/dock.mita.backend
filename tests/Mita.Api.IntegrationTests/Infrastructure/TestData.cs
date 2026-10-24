@@ -341,11 +341,22 @@ public static class TestData
         GroupMember to,
         long amount,
         string date = "2026-10-05",
-        bool deleted = false)
+        bool deleted = false,
+        IReadOnlyList<GroupCover>? covers = null)
     {
         var repayment = GroupRepayment.Create(
             group.Id,
-            new GroupRepaymentDetails(from.Id, to.Id, amount, group.Currency, ParseDate(date), 1m, false, amount, null));
+            new GroupRepaymentDetails(
+                from.Id,
+                to.Id,
+                amount,
+                group.Currency,
+                ParseDate(date),
+                1m,
+                false,
+                amount,
+                null,
+                covers ?? []));
         var state = JsonSerializer.Serialize(GroupRepaymentState.From(repayment), WireJson);
 
         await AddEntryAsync(

@@ -318,7 +318,13 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
         await TestData.InviteMemberAsync(factory, members[2], "max@example.com");
         var expense = await TestData.AddGroupExpenseAsync(factory, group, members[0], 9_000, members);
         await TestData.AddGroupExpenseAsync(factory, group, members[1], 1_500, members[1..], deleted: true);
-        await TestData.AddGroupRepaymentAsync(factory, group, members[2], members[0], 3_000);
+        await TestData.AddGroupRepaymentAsync(
+            factory,
+            group,
+            members[2],
+            members[0],
+            3_000,
+            covers: [new GroupCover(expense.Id, 3_000)]);
         await using (var setup = factory.Services.CreateAsyncScope())
         {
             var db = setup.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -356,6 +362,7 @@ public sealed class MeTests(MitaApiFactory factory) : IClassFixture<MitaApiFacto
         (await check.GroupExpenses.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
         (await check.GroupExpenseShares.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
         (await check.GroupRepayments.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
+        (await check.GroupRepaymentCovers.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
         (await check.GroupEntryEvents.AnyAsync(row => row.GroupId == group.Id, Ct)).ShouldBeFalse();
     }
 

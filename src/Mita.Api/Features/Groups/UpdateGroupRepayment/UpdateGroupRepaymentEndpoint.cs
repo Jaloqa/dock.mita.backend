@@ -55,7 +55,8 @@ public static class UpdateGroupRepaymentEndpoint
             request?.Currency,
             request?.Date,
             request?.Rate,
-            request?.Note);
+            request?.Note,
+            request?.Settles);
 
         return (await mediator.Send(command, ct)).ToHttp(repayment => Results.Ok(repayment));
     }

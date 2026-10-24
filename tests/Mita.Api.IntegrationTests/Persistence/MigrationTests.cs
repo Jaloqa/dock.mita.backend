@@ -38,7 +38,7 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
                 'accounts', 'transfers', 'exchange_rates', 'account_movements', 'categories', 'transactions',
                 'budgets', 'goals', 'goal_contributions', 'tags', 'transaction_tags', 'debts', 'debt_repayments',
                 'groups', 'group_members', 'group_categories', 'group_expenses', 'group_expense_shares',
-                'group_repayments', 'group_entry_events')
+                'group_repayments', 'group_entry_events', 'group_repayment_covers')
             """,
             connection);
         var tables = new List<string>();
@@ -55,7 +55,8 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
                 "AspNetUsers", "refresh_tokens", "user_settings", "accounts", "transfers", "exchange_rates",
                 "account_movements", "categories", "transactions", "budgets", "goals", "goal_contributions", "tags",
                 "transaction_tags", "debts", "debt_repayments", "groups", "group_members", "group_categories",
-                "group_expenses", "group_expense_shares", "group_repayments", "group_entry_events"
+                "group_expenses", "group_expense_shares", "group_repayments", "group_entry_events",
+                "group_repayment_covers"
             ],
             ignoreOrder: true);
 
@@ -292,6 +293,45 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
     }
 
     [Fact]
+    public async Task Should_BackfillCovers_When_RepaymentsExistedBeforeMigration()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = postgres.NewDatabaseConnectionString();
+        await using var context = NewContext(connectionString);
+        await context.GetService<IMigrator>().MigrateAsync("GroupMemberLinks", cancellationToken: ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var (userId, groupId) = (Guid.NewGuid(), Guid.NewGuid());
+        var (anna, olya, max) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var (removedExpense, e1, e2) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var (first, second, removed, fromMax) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(ct);
+        await InsertUserWithSettings(connection, userId, "En", ct);
+        await InsertGroup(connection, userId, groupId, [anna, olya, max], ct);
+        await InsertGroupExpense(connection, groupId, removedExpense, olya, today.AddDays(-6), [anna, olya, max], 1_000, true, ct);
+        await InsertGroupExpense(connection, groupId, e1, olya, today.AddDays(-5), [anna, olya, max], 3_000, false, ct);
+        await InsertGroupExpense(connection, groupId, e2, olya, today.AddDays(-3), [anna, olya, max], 2_000, false, ct);
+        await InsertGroupRepayment(connection, groupId, removed, anna, olya, 1_000, today.AddDays(-4), true, ct);
+        await InsertGroupRepayment(connection, groupId, first, anna, olya, 4_000, today.AddDays(-2), false, ct);
+        await InsertGroupRepayment(connection, groupId, second, anna, olya, 2_000, today.AddDays(-1), false, ct);
+        await InsertGroupRepayment(connection, groupId, fromMax, max, olya, 1_000, today.AddDays(-1), false, ct);
+
+        await context.Database.MigrateAsync(ct);
+
+        var covers = await ReadCovers(connection, ct);
+        (Guid ExpenseId, long GroupAmount)[] Of(Guid repaymentId) =>
+            [.. covers.Where(cover => cover.RepaymentId == repaymentId).Select(cover => (cover.ExpenseId, cover.GroupAmount))];
+
+        Of(first).ShouldBe([(e1, 3_000L), (e2, 1_000L)]);
+        Of(second).ShouldBe([(e2, 1_000L)]);
+        Of(fromMax).ShouldBe([(e1, 1_000L)]);
+        Of(removed).ShouldBeEmpty();
+        covers.Count.ShouldBe(4);
+        covers.ShouldAllBe(cover => cover.GroupId == groupId);
+        covers.Where(cover => cover.RepaymentId == first).Select(cover => cover.Position).ShouldBe([0, 1]);
+    }
+
+    [Fact]
     public async Task Should_RejectSecondUser_When_NormalizedEmailRepeats()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -431,6 +471,145 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
         return keys;
     }
 
+    private static async Task InsertGroup(
+        NpgsqlConnection connection,
+        Guid ownerId,
+        Guid groupId,
+        Guid[] memberIds,
+        CancellationToken ct)
+    {
+        await ExecuteAsync(
+            connection,
+            """
+            INSERT INTO "groups" ("Id", "OwnerId", "Name", "Currency", "CreatedAt", "UpdatedAt")
+            VALUES (@id, @ownerId, 'Trip', 'EUR', now(), now())
+            """,
+            ct,
+            ("id", groupId),
+            ("ownerId", ownerId));
+        for (var position = 0; position < memberIds.Length; position++)
+        {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO group_members ("Id", "GroupId", "Name", "Position")
+                VALUES (@id, @groupId, @name, @position)
+                """,
+                ct,
+                ("id", memberIds[position]),
+                ("groupId", groupId),
+                ("name", $"Member {position}"),
+                ("position", position));
+        }
+    }
+
+    private static async Task InsertGroupExpense(
+        NpgsqlConnection connection,
+        Guid groupId,
+        Guid expenseId,
+        Guid payerId,
+        DateOnly date,
+        Guid[] between,
+        long share,
+        bool deleted,
+        CancellationToken ct)
+    {
+        await ExecuteAsync(
+            connection,
+            """
+            INSERT INTO group_expenses ("Id", "GroupId", "PayerId", "Amount", "Currency", "Date", "StandardCategory",
+                "Tags", "Rate", "RateManual", "GroupAmount", "Split", "DeletedAt", "CreatedAt", "UpdatedAt")
+            VALUES (@id, @groupId, @payerId, @amount, 'EUR', @date, 'other', '{}', 1, false, @amount, 'Equal',
+                @deletedAt, now(), now())
+            """,
+            ct,
+            ("id", expenseId),
+            ("groupId", groupId),
+            ("payerId", payerId),
+            ("amount", share * between.Length),
+            ("date", date),
+            ("deletedAt", deleted ? DateTimeOffset.UtcNow : null));
+        foreach (var memberId in between)
+        {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO group_expense_shares ("ExpenseId", "MemberId", "GroupId", "Amount", "GroupAmount")
+                VALUES (@expenseId, @memberId, @groupId, @share, @share)
+                """,
+                ct,
+                ("expenseId", expenseId),
+                ("memberId", memberId),
+                ("groupId", groupId),
+                ("share", share));
+        }
+    }
+
+    private static Task InsertGroupRepayment(
+        NpgsqlConnection connection,
+        Guid groupId,
+        Guid repaymentId,
+        Guid fromMemberId,
+        Guid toMemberId,
+        long amount,
+        DateOnly date,
+        bool deleted,
+        CancellationToken ct) =>
+        ExecuteAsync(
+            connection,
+            """
+            INSERT INTO group_repayments ("Id", "GroupId", "FromMemberId", "ToMemberId", "Amount", "Currency", "Date",
+                "Rate", "RateManual", "GroupAmount", "DeletedAt", "CreatedAt", "UpdatedAt")
+            VALUES (@id, @groupId, @fromMemberId, @toMemberId, @amount, 'EUR', @date, 1, false, @amount, @deletedAt,
+                now(), now())
+            """,
+            ct,
+            ("id", repaymentId),
+            ("groupId", groupId),
+            ("fromMemberId", fromMemberId),
+            ("toMemberId", toMemberId),
+            ("amount", amount),
+            ("date", date),
+            ("deletedAt", deleted ? DateTimeOffset.UtcNow : null));
+
+    private static async Task<List<StoredCover>> ReadCovers(NpgsqlConnection connection, CancellationToken ct)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT "RepaymentId", "ExpenseId", "GroupId", "Position", "GroupAmount" FROM group_repayment_covers
+            ORDER BY "RepaymentId", "Position"
+            """,
+            connection);
+        var covers = new List<StoredCover>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            covers.Add(new StoredCover(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                reader.GetGuid(2),
+                reader.GetInt32(3),
+                reader.GetInt64(4)));
+        }
+
+        return covers;
+    }
+
+    private static async Task ExecuteAsync(
+        NpgsqlConnection connection,
+        string sql,
+        CancellationToken ct,
+        params (string Name, object? Value)[] parameters)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        foreach (var (name, value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        }
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task InsertUserWithSettings(
         NpgsqlConnection connection,
         Guid userId,
@@ -452,4 +631,6 @@ public sealed class MigrationTests(PostgresFixture postgres, MitaApiFactory fact
         command.Parameters.AddWithValue("locale", locale);
         await command.ExecuteNonQueryAsync(ct);
     }
+
+    private sealed record StoredCover(Guid RepaymentId, Guid ExpenseId, Guid GroupId, int Position, long GroupAmount);
 }

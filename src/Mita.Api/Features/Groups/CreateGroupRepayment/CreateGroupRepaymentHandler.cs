@@ -21,7 +21,7 @@ public sealed class CreateGroupRepaymentHandler(
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var opened = await access.OpenForWriteAsync(command.Scope, GroupLock.Share, cancellationToken);
+        var opened = await access.OpenForWriteAsync(command.Scope, GroupLock.Update, cancellationToken);
         if (!opened.IsSuccess)
         {
             return opened.Error!;
@@ -29,7 +29,7 @@ public sealed class CreateGroupRepaymentHandler(
 
         var group = opened.Value;
 
-        var prepared = await writer.PrepareAsync(group, input, cancellationToken);
+        var prepared = await writer.PrepareAsync(group, input, null, cancellationToken);
         if (!prepared.IsSuccess)
         {
             return prepared.Error!;

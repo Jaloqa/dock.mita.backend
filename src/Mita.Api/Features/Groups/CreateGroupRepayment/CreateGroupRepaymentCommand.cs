@@ -12,7 +12,8 @@ public sealed record CreateGroupRepaymentRequest(
     JsonElement? Currency,
     JsonElement? Date,
     JsonElement? Rate,
-    JsonElement? Note);
+    JsonElement? Note,
+    JsonElement? Settles);
 
 public sealed record CreateGroupRepaymentCommand(
     GroupScope Scope,
@@ -22,4 +23,5 @@ public sealed record CreateGroupRepaymentCommand(
     JsonElement? Currency,
     JsonElement? Date,
     JsonElement? Rate,
-    JsonElement? Note) : IRequest<Result<GroupRepaymentDto>>, IGroupRepaymentInput;
+    JsonElement? Note,
+    JsonElement? Settles) : IRequest<Result<GroupRepaymentDto>>, IGroupRepaymentInput;

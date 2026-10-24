@@ -60,6 +60,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Ident
 
     public DbSet<GroupRepayment> GroupRepayments => Set<GroupRepayment>();
 
+    public DbSet<GroupRepaymentCover> GroupRepaymentCovers => Set<GroupRepaymentCover>();
+
     public DbSet<GroupEntryEvent> GroupEntryEvents => Set<GroupEntryEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)

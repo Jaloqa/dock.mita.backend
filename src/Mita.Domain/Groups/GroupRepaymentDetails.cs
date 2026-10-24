@@ -11,4 +11,5 @@ public sealed record GroupRepaymentDetails(
     decimal Rate,
     bool RateManual,
     long GroupAmount,
-    string? Note);
+    string? Note,
+    IReadOnlyList<GroupCover> Covers);
