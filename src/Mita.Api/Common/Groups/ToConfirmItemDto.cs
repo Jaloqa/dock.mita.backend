@@ -18,7 +18,7 @@ public sealed record ToConfirmItemDto(
     string GroupName,
     string GroupCurrency,
     string Change,
-    Guid Version,
+    string Version,
     [property: JsonConverter(typeof(UtcIsoDateTimeOffsetConverter))] DateTimeOffset At,
     GroupActorDto Actor,
     object? Current,

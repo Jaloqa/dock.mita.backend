@@ -19,7 +19,7 @@ namespace Mita.Api.Common.Groups;
 public sealed record ParsedConfirmLine(Guid? CategoryId, string? NewCategory, string Title, IReadOnlyList<string> Tags);
 
 public sealed record ParsedConfirmation(
-    Guid Version,
+    string Version,
     Guid? AccountId,
     decimal? ManualRate,
     IReadOnlyList<ParsedConfirmLine>? Lines);
@@ -41,7 +41,7 @@ public sealed class GroupRecordWriter(AppDbContext db, GroupAccess access, TimeP
         Guid userId,
         GroupEntryKind kind,
         Guid entryId,
-        Guid version,
+        string version,
         CancellationToken ct)
     {
         if (await EntryGroupIdAsync(kind, entryId, ct) is not { } groupId
@@ -60,7 +60,7 @@ public sealed class GroupRecordWriter(AppDbContext db, GroupAccess access, TimeP
             return Error.NotFound();
         }
 
-        if (item.Version != version)
+        if (!string.Equals(item.Version, version, StringComparison.Ordinal))
         {
             return GroupErrors.ItemChanged;
         }

@@ -21,7 +21,7 @@ public sealed class RejectItemHandler(
             return Error.NotFound();
         }
 
-        if (!JsonValues.TryGetGuid(command.Version, out var version))
+        if (!JsonValues.TryGetString(command.Version, out var version))
         {
             throw new InvalidOperationException("The rejection reached the handler without passing validation.");
         }

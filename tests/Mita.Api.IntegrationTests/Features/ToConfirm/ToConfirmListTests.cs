@@ -74,7 +74,7 @@ public sealed class ToConfirmListTests(MitaApiFactory factory) : IClassFixture<M
         item.GetProperty("groupCurrency").GetString().ShouldBe("EUR");
         item.GetProperty("change").GetString().ShouldBe("new");
         var newest = await NewestEventAsync(owner, trip.Group.Id, "expenses", expenseId);
-        item.GetProperty("version").GetGuid().ShouldBe(newest.GetProperty("id").GetGuid());
+        item.GetProperty("version").GetString().ShouldBe(VersionOf(newest, trip.Anna));
         item.GetProperty("at").GetString().ShouldBe(newest.GetProperty("at").GetString());
         var actor = item.GetProperty("actor");
         actor.GetProperty("kind").GetString().ShouldBe("owner");
@@ -435,8 +435,8 @@ public sealed class ToConfirmListTests(MitaApiFactory factory) : IClassFixture<M
 
         var changed = (await ListAsync(user)).GetProperty("items").EnumerateArray().Single();
         changed.GetProperty("change").GetString().ShouldBe("changed");
-        changed.GetProperty("version").GetGuid()
-            .ShouldBe((await NewestEventAsync(owner, trip.Group.Id, "expenses", expenseId)).GetProperty("id").GetGuid());
+        changed.GetProperty("version").GetString()
+            .ShouldBe(VersionOf(await NewestEventAsync(owner, trip.Group.Id, "expenses", expenseId), trip.Anna));
         var previous = changed.GetProperty("previous");
         Names(previous).ShouldBe(ExpenseTermProperties, ignoreOrder: true);
         previous.GetProperty("amount").GetInt64().ShouldBe(12_000);
@@ -602,8 +602,8 @@ public sealed class ToConfirmListTests(MitaApiFactory factory) : IClassFixture<M
         items.Select(EntryId).ShouldBe([repaymentId, expenseId]);
         items.ShouldAllBe(item => item.GetProperty("change").GetString() == "removed");
         items.ShouldAllBe(item => item.GetProperty("current").ValueKind == JsonValueKind.Null);
-        items[0].GetProperty("version").GetGuid()
-            .ShouldBe((await NewestEventAsync(owner, trip.Group.Id, "repayments", repaymentId)).GetProperty("id").GetGuid());
+        items[0].GetProperty("version").GetString()
+            .ShouldBe(VersionOf(await NewestEventAsync(owner, trip.Group.Id, "repayments", repaymentId), trip.Anna));
         Names(items[0].GetProperty("previous")).ShouldBe(ReceivedTermProperties);
         items[1].GetProperty("previous").GetProperty("share").GetInt64().ShouldBe(4_000);
     }
@@ -718,6 +718,9 @@ public sealed class ToConfirmListTests(MitaApiFactory factory) : IClassFixture<M
 
     private static async Task<JsonElement> NewestEventAsync(AuthClient client, Guid groupId, string kind, Guid entryId) =>
         (await GetAsync(client, $"{GroupsPath}/{groupId}/{kind}/{entryId}/history")).GetProperty("items")[0];
+
+    private static string VersionOf(JsonElement newestEvent, GroupMember member) =>
+        $"{newestEvent.GetProperty("id").GetGuid()}.{member.Id}";
 
     private static async Task<Guid> ExpenseCategoryIdAsync(AuthClient client, string name) =>
         (await GetAsync(client, "/v1/categories?kind=expense")).GetProperty("items").EnumerateArray()

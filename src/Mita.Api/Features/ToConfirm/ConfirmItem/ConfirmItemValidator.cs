@@ -17,7 +17,7 @@ public sealed class ConfirmItemValidator : AbstractValidator<ConfirmItemCommand>
 
         RuleFor(command => command.Version)
             .Must(value => !JsonValues.IsMissing(value)).WithErrorCode(Required)
-            .Must(value => JsonValues.TryGetGuid(value, out _)).WithErrorCode(InvalidValue);
+            .Must(value => JsonValues.TryGetString(value, out _)).WithErrorCode(InvalidValue);
 
         RuleFor(command => command.AccountId)
             .Must(value => JsonValues.TryGetGuid(value, out _)).WithErrorCode(TransactionReferenceRules.UnknownAccount)
